@@ -1,0 +1,19 @@
+---
+description: Tests follow project TESTING_GUIDELINES
+globs: src/tests/**,server/tests/**,**/setupTests.js,**/*.{test,spec}.{js,jsx}
+alwaysApply: false
+---
+
+# Testing
+
+Follow `documentation/TESTING_GUIDELINES.md`. Every new feature, behavior change, or bug fix includes tests.
+
+Cover:
+
+- Happy path
+- Failure and edge cases
+- Authorization or permission logic when the change is gated
+
+Use feature-based file names (`App.[feature].test.js`, `ComponentName.test.js`, `helperName.test.js`). Reuse `src/tests/__mocks__/fetchMocks.js` instead of inventing a new mock layer.
+
+Use the `write-tests` skill when adding or reshaping the suite.

@@ -1,0 +1,16 @@
+---
+description: UI uses existing Tailwind tokens and layout patterns only
+globs: src/**/*.{js,jsx,css},tailwind.config.js,index.html
+alwaysApply: false
+---
+
+# UI and styling
+
+All UI changes use Tailwind utilities and tokens already defined in `tailwind.config.js`. Do not add inline styles, arbitrary values (`bg-[#…]`, `w-[13px]`), or new colors/fonts.
+
+- Match existing layout, spacing, and interaction patterns. Clone the nearest screen.
+- If `documentation/BRAND_GUIDELINES.md` exists, follow it for voice, type, shape, and motion.
+- Native shell: `100dvh`, safe-area padding, `font-size: 1rem` on text inputs (avoid WKWebView zoom).
+- No helper paragraphs that explain what a control does. Labels, placeholders, toasts, and empty states carry meaning.
+
+Use the `ui-design` skill for UI work. Keyboard overlap → personal skill `mobile-app-resize-on-input-focus`. iOS OAuth → `ios-third-party-authentication`.

@@ -1,0 +1,18 @@
+---
+description: Fetch current docs for installed libraries only (Context7)
+alwaysApply: true
+---
+
+# Library documentation
+
+When implementing against a library **already listed in `package.json`**, fetch current, version-specific docs via Context7 (or the official docs) instead of relying on training data. Prefer the installed major/minor.
+
+Typical stack libraries: React, React Router, Redux Toolkit, Tailwind CSS v4, Ionic React, Capacitor, Vite, Express, Passport, `pg`, Firebase Admin, Stripe, Google Cloud client libs, Testing Library.
+
+Do **not**:
+
+- Add a dependency because Context7 (or any doc source) suggested it
+- Change architecture, folder layout, or Tailwind tokens based on generic examples
+- Treat Context7 as a source of product UX, schema design, or App Shell patterns
+
+If Context7 is not configured, use official docs or existing code in this repo.

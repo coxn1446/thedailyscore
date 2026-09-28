@@ -1,0 +1,25 @@
+node_modules/
+build/
+dist/
+coverage/
+uploads/*
+!uploads/.gitkeep
+secrets/
+
+.env
+.env.local
+.env.*.local
+
+.DS_Store
+*.log
+npm-debug.log*
+
+# Google Cloud service account keys
+*.serviceaccount.json
+service-account*.json
+
+# Capacitor / Xcode
+ios/App/Pods/
+ios/App/App/public/
+ios/DerivedData/
+*.xcuserdata

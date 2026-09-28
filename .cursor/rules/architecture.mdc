@@ -1,0 +1,22 @@
+---
+description: Follow this app’s architecture; do not invent new patterns or dependencies
+alwaysApply: true
+---
+
+# Architecture
+
+Follow `documentation/ARCHITECTURE.md` and `AGENTS.md`. Do not introduce new patterns, dependencies, or abstractions unless that architecture doc explicitly allows them.
+
+Layering is mandatory:
+
+- `src/components/` — render UI only
+- `src/helpers/` — client calls and UI-adjacent logic
+- `server/routes/` — HTTP, validation, auth
+- `server/services/` — business logic
+- `server/queries/` — parameterized SQL only
+
+Components call helpers; helpers call routes; routes call services; services call queries.
+
+Match existing file names, folders, and Redux usage. Do not add an ORM, a new UI kit, or speculative folders.
+
+After a feature ships, update the Features and API Endpoints sections of `documentation/ARCHITECTURE.md` as **current state** (one Last Updated date). Do not append a changelog novel to the top of that file — use `CHANGELOG.md` if a history is needed.

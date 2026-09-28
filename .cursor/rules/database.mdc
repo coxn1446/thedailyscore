@@ -1,0 +1,16 @@
+---
+description: Keep SQL, schema docs, and runtime queries consistent
+globs: server/db/**,server/queries/**,**/DATABASE_SCHEMA.md,server/db/schema.sql
+alwaysApply: false
+---
+
+# Database
+
+Any change that affects persistence must update `documentation/DATABASE_SCHEMA.md` in the same commit. `server/db/schema.sql`, incremental migrations (if this app uses them), query files, and runtime usage must stay consistent with that doc.
+
+- Parameterized SQL only (`pg` placeholders). No string-concatenated queries.
+- Prefer `TIMESTAMPTZ`, explicit FKs, and indexes that match real `WHERE` / `JOIN` paths.
+- No ORM. No speculative tables or columns.
+- Document purpose, columns, indexes, FKs, triggers, and Last Modified on each changed table.
+
+Use the `persistence-change` skill for the full workflow.
