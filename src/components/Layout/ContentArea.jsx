@@ -14,8 +14,11 @@ const GUEST_PATHS = new Set([
   '/forgot-password',
   '/reset-password',
   '/verify-email',
+  '/accept-policies',
   '/terms',
   '/privacy',
+  '/account-deletion',
+  '/support',
 ]);
 
 const ContentArea = ({ children }) => {
@@ -24,6 +27,7 @@ const ContentArea = ({ children }) => {
   const user = useSelector(selectUser);
   const { pathname } = useLocation();
   const showChrome = isAuthenticated && !needsHandle(user);
+  const legal = pathname === '/terms' || pathname === '/privacy' || pathname === '/account-deletion' || pathname === '/support';
 
   if (isLoading) {
     return (
@@ -33,16 +37,21 @@ const ContentArea = ({ children }) => {
     );
   }
 
-  if (!showChrome) {
+  if (!showChrome || legal) {
     const guestShell = GUEST_PATHS.has(pathname) || pathname.startsWith('/reset-password');
     return (
-      <div data-testid="content-pane" className="app-shell overflow-y-auto">
-        <div className={guestShell ? 'min-h-dvh' : 'min-h-dvh px-margin py-space-lg'}>{children}</div>
+      <div data-testid="content-pane" className="app-shell">
+        <div className={legal ? 'h-full min-h-0' : (guestShell ? 'min-h-dvh' : 'min-h-dvh px-margin py-space-lg')}>
+          {children}
+        </div>
       </div>
     );
   }
 
-  const fill = (pathname.startsWith('/groups') && !pathname.endsWith('/governance')) || pathname === '/messages';
+  const fill = pathname === '/'
+    || pathname === '/board'
+    || pathname === '/messages'
+    || (pathname.startsWith('/groups') && !pathname.endsWith('/governance'));
 
   return (
     <div data-testid="content-pane" className="app-shell bg-background">

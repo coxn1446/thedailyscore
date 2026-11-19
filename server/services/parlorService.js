@@ -54,6 +54,7 @@ const presentMessage = (row) => ({
   display_name: row.display_name,
   portrait_url: row.portrait_url || null,
   body: row.body,
+  kind: row.kind === 'standings' ? 'standings' : 'chat',
   created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
   reactions: row.reactions || [],
 });
@@ -73,6 +74,24 @@ const ensureParlor = async (groupId) => {
   return created.rows[0];
 };
 
+const chattersFrom = (value) => {
+  let rows = value;
+  if (typeof rows === 'string') {
+    try {
+      rows = JSON.parse(rows);
+    } catch {
+      rows = [];
+    }
+  }
+  if (!Array.isArray(rows)) return [];
+  return rows.slice(0, 3).map((chatter) => ({
+    user_id: Number(chatter.user_id),
+    display_name: chatter.display_name || '',
+    handle: chatter.handle || '',
+    portrait_url: chatter.portrait_url || null,
+  }));
+};
+
 const listConversations = async (userId) => {
   requireDb();
   const listed = await query(parlorQueries.listConversations, [userId]);
@@ -84,7 +103,7 @@ const listConversations = async (userId) => {
       slug: row.slug,
       game_name: row.game_name,
       unread_count: Number(row.unread_count) || 0,
-      last_message: row.last_message || null,
+      recent_chatters: chattersFrom(row.recent_chatters),
     })),
   };
 };
@@ -114,7 +133,8 @@ const setReaction = async (user, groupId, messageId, kind) => {
   if (!message.rows[0]) httpError(404, 'Message not found');
   await requirePostedGame(user.user_id, message.rows[0].slug);
   const existing = await query(parlorQueries.findReaction, [messageId, user.user_id]);
-  if (existing.rows[0]?.kind === kind) {
+  const removed = existing.rows[0]?.kind === kind;
+  if (removed) {
     await query(parlorQueries.deleteReaction, [messageId, user.user_id]);
   } else {
     await query(parlorQueries.upsertReaction, [messageId, user.user_id, kind]);
@@ -126,6 +146,19 @@ const setReaction = async (user, groupId, messageId, kind) => {
     reactions: reactions[0].reactions,
   };
   emitToRoom(roomName(groupId, message.rows[0].game_id), 'parlor:reaction', payload);
+  if (!removed) {
+    const actorName = (user.display_name && String(user.display_name).trim()) || user.handle || 'A member';
+    try {
+      await pushService.notifyReaction({
+        groupId,
+        actorUserId: user.user_id,
+        actorName,
+        authorUserId: message.rows[0].user_id,
+      });
+    } catch (err) {
+      console.error('Reaction push failed:', err.message);
+    }
+  }
   return payload;
 };
 
@@ -176,10 +209,94 @@ const postMessage = async (user, groupId, body, slug) => {
   return { message };
 };
 
+const filingValue = (row) => {
+  if (row.rank_basis === 'guesses') {
+    if (row.guesses != null && row.guesses !== '' && row.solved !== false && row.solved !== 'f') return Number(row.guesses);
+    return 7;
+  }
+  return row.score == null ? null : Number(row.score);
+};
+
+const filingMark = (row) => {
+  if (row.rank_basis === 'guesses') {
+    const cap = row.guess_cap == null || row.guess_cap === '' ? '' : `/${row.guess_cap}`;
+    if (row.solved === false || row.solved === 'f' || row.guesses == null) return `X${cap}`;
+    return `${row.guesses}${cap}`;
+  }
+  return String(row.score);
+};
+
+const standingsBody = (rows) => {
+  const direction = rows[0]?.sort_direction === 'lower' || rows[0]?.rank_basis === 'guesses' ? 'lower' : 'higher';
+  const byUser = new Map();
+  for (const row of rows) {
+    const value = filingValue(row);
+    if (value == null || Number.isNaN(value)) continue;
+    const current = byUser.get(Number(row.user_id));
+    const better = !current
+      || (direction === 'lower' ? value < current.value : value > current.value);
+    if (better) byUser.set(Number(row.user_id), { ...row, value });
+  }
+  const ranked = [...byUser.values()].sort((a, b) => (
+    direction === 'lower' ? a.value - b.value : b.value - a.value
+  ) || Number(a.user_id) - Number(b.user_id));
+  const lines = ['Rankings'];
+  ranked.forEach((row, index) => {
+    const name = (row.display_name && String(row.display_name).trim()) || row.handle || 'Member';
+    lines.push(`${index + 1}. ${name} — ${filingMark(row)}`);
+  });
+  return lines.join('\n').slice(0, 2000);
+};
+
+const noteStandings = async ({ userId, game, groups }) => {
+  if (!game || !Array.isArray(groups) || !groups.length) return;
+  for (const group of groups) {
+    const filings = await query(parlorQueries.todayFilings, [group.group_id, game.game_id]);
+    const rows = filings.rows;
+    if (!rows.length) continue;
+    const members = Number(rows[0].member_count) || 0;
+    const distinct = new Set(rows.map((row) => Number(row.user_id)));
+    if (!members || distinct.size !== members || !distinct.has(Number(userId))) continue;
+    const existing = await query(parlorQueries.standingsToday, [group.group_id, game.game_id]);
+    if (existing.rows[0]) continue;
+    const parlor = await ensureParlor(group.group_id);
+    const author = rows.find((row) => Number(row.user_id) === Number(userId)) || rows[0];
+    const inserted = await query(parlorQueries.insertStandings, [
+      parlor.parlor_id,
+      game.game_id,
+      userId,
+      standingsBody(rows),
+    ]);
+    const row = inserted.rows[0];
+    if (!row) continue;
+    const message = presentMessage({
+      ...row,
+      group_id: group.group_id,
+      slug: game.slug,
+      handle: author.handle,
+      display_name: author.display_name,
+      portrait_url: author.portrait_url,
+    });
+    emitToRoom(roomName(group.group_id, game.game_id), 'parlor:message', message);
+    const authorName = (author.display_name && String(author.display_name).trim()) || author.handle || 'A member';
+    try {
+      await pushService.notifyParlor({
+        groupId: group.group_id,
+        authorUserId: userId,
+        authorName,
+        body: `${game.name} rankings are in.`,
+      });
+    } catch (err) {
+      console.error('Standings push failed:', err.message);
+    }
+  }
+};
+
 module.exports = {
   listConversations,
   listMessages,
   postMessage,
   markRead,
   setReaction,
+  noteStandings,
 };

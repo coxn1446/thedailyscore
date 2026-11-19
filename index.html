@@ -9,7 +9,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#FBF9F5" />
     <meta name="color-scheme" content="light" />
-    <meta name="description" content="The Daily Score — the social broadsheet of daily games." />
+    <meta name="description" content="Check out the daily score to keep track of all your daily challenge games" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="The Daily Score" />
+    <meta property="og:title" content="The Daily Score" />
+    <meta property="og:description" content="Check out the daily score to keep track of all your daily challenge games" />
+    <meta property="og:url" content="https://thedailyscore.site" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="The Daily Score" />
+    <meta name="twitter:description" content="Check out the daily score to keep track of all your daily challenge games" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -42,6 +50,34 @@
     </div>
     <script>
       (function () {
+        function savedNight() {
+          try {
+            var raw = localStorage.getItem('ds:auth:user');
+            if (!raw) return false;
+            var user = JSON.parse(raw);
+            return !!(user && user.night_mode === true);
+          } catch (e) {
+            return false;
+          }
+        }
+
+        function paintSavedTheme() {
+          if (!savedNight()) return;
+          var color = '#111111';
+          document.documentElement.classList.add('night');
+          document.documentElement.style.backgroundColor = color;
+          if (document.body) document.body.style.backgroundColor = color;
+          var theme = document.querySelector('meta[name="theme-color"]');
+          if (theme) theme.setAttribute('content', color);
+          var scheme = document.querySelector('meta[name="color-scheme"]');
+          if (scheme) scheme.setAttribute('content', 'dark');
+          var loader = document.getElementById('initial-loader');
+          if (loader) {
+            loader.style.background = color;
+            loader.style.color = '#FBF9F5';
+          }
+        }
+
         function markNativeShell() {
           try {
             var cap = window.Capacitor;
@@ -49,8 +85,10 @@
               return false;
             }
             document.documentElement.classList.add('capacitor-native');
-            document.documentElement.style.backgroundColor = '#FBF9F5';
-            document.body.style.backgroundColor = '#FBF9F5';
+            if (!document.documentElement.classList.contains('night')) {
+              document.documentElement.style.backgroundColor = '#FBF9F5';
+              document.body.style.backgroundColor = '#FBF9F5';
+            }
             var loader = document.getElementById('initial-loader');
             if (loader) loader.remove();
             return true;
@@ -58,6 +96,8 @@
             return false;
           }
         }
+
+        paintSavedTheme();
         if (!markNativeShell()) {
           document.addEventListener('DOMContentLoaded', markNativeShell);
           window.addEventListener('load', markNativeShell);

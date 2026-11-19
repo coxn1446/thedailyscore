@@ -72,14 +72,38 @@ const listConversations = `
         AND pm.message_id > COALESCE(rd.last_read_message_id, 0)
     ) AS unread_count,
     (
-      SELECT pm.body
-      FROM parlor_messages pm
-      JOIN parlors pr ON pr.parlor_id = pm.parlor_id
-      WHERE pr.group_id = g.group_id
-        AND pm.game_id = ga.game_id
-      ORDER BY pm.message_id DESC
-      LIMIT 1
-    ) AS last_message
+      SELECT COALESCE(
+        json_agg(
+          json_build_object(
+            'user_id', chatter.user_id,
+            'display_name', chatter.display_name,
+            'handle', chatter.handle,
+            'portrait_url', chatter.portrait_url
+          )
+          ORDER BY chatter.message_id DESC
+        ),
+        '[]'::json
+      )
+      FROM (
+        SELECT latest.user_id, latest.display_name, latest.handle, latest.portrait_url, latest.message_id
+        FROM (
+          SELECT DISTINCT ON (pm.user_id)
+            pm.user_id,
+            u.display_name,
+            u.handle,
+            u.portrait_url,
+            pm.message_id
+          FROM parlor_messages pm
+          JOIN parlors pr ON pr.parlor_id = pm.parlor_id
+          JOIN users u ON u.user_id = pm.user_id
+          WHERE pr.group_id = g.group_id
+            AND pm.game_id = ga.game_id
+          ORDER BY pm.user_id, pm.message_id DESC
+        ) latest
+        ORDER BY latest.message_id DESC
+        LIMIT 3
+      ) chatter
+    ) AS recent_chatters
   FROM group_members m
   JOIN groups g ON g.group_id = m.group_id AND g.archived = FALSE
   JOIN group_games gg ON gg.group_id = g.group_id AND gg.enabled = TRUE
@@ -93,7 +117,7 @@ const listConversations = `
         AND s.game_id = ga.game_id
         AND s.played_on = (NOW() AT TIME ZONE u.timezone)::date
     )
-  ORDER BY g.name ASC, ga.sort_order ASC, ga.game_id ASC
+  ORDER BY unread_count DESC, g.name ASC, ga.sort_order ASC, ga.game_id ASC
 `;
 
 const listMessages = `
@@ -103,6 +127,7 @@ const listMessages = `
     m.game_id,
     m.user_id,
     m.body,
+    m.kind,
     m.created_at,
     u.handle,
     u.display_name,
@@ -166,17 +191,73 @@ const deleteReaction = `
 `;
 
 const messageInGroup = `
-  SELECT m.message_id, m.game_id, ga.slug
+  SELECT m.message_id, m.user_id, m.game_id, ga.slug
   FROM parlor_messages m
   JOIN parlors p ON p.parlor_id = m.parlor_id
   JOIN games ga ON ga.game_id = m.game_id
   WHERE m.message_id = $1 AND p.group_id = $2
 `;
 
+const puzzleToday = `
+  (
+    date_trunc('day', NOW() AT TIME ZONE g.timezone)
+    + ga.resets_at
+    - CASE
+        WHEN (NOW() AT TIME ZONE g.timezone)::time < ga.resets_at THEN INTERVAL '1 day'
+        ELSE INTERVAL '0'
+      END
+  )::date
+`;
+
+const todayFilings = `
+  SELECT
+    s.user_id,
+    s.score_id,
+    s.score,
+    s.guesses,
+    s.solved,
+    u.display_name,
+    u.handle,
+    u.portrait_url,
+    ga.guess_cap,
+    ga.rank_basis,
+    ga.sort_direction,
+    ga.name AS game_name,
+    ga.slug,
+    (SELECT COUNT(*)::int FROM group_members WHERE group_id = g.group_id) AS member_count
+  FROM groups g
+  JOIN games ga ON ga.game_id = $2
+  JOIN score_publications p ON p.group_id = g.group_id
+  JOIN scores s ON s.score_id = p.score_id AND s.game_id = ga.game_id
+  JOIN users u ON u.user_id = s.user_id
+  WHERE g.group_id = $1
+    AND g.archived = FALSE
+    AND s.played_on = ${puzzleToday}
+`;
+
+const standingsToday = `
+  SELECT m.message_id
+  FROM parlor_messages m
+  JOIN parlors p ON p.parlor_id = m.parlor_id
+  JOIN groups g ON g.group_id = p.group_id
+  JOIN games ga ON ga.game_id = m.game_id
+  WHERE p.group_id = $1
+    AND m.game_id = $2
+    AND m.kind = 'standings'
+    AND (m.created_at AT TIME ZONE g.timezone)::date = ${puzzleToday}
+  LIMIT 1
+`;
+
 const insertMessage = `
   INSERT INTO parlor_messages (parlor_id, game_id, user_id, body)
   VALUES ($1, $2, $3, $4)
-  RETURNING message_id, game_id, user_id, body, created_at
+  RETURNING message_id, game_id, user_id, body, kind, created_at
+`;
+
+const insertStandings = `
+  INSERT INTO parlor_messages (parlor_id, game_id, user_id, body, kind)
+  VALUES ($1, $2, $3, $4, 'standings')
+  RETURNING message_id, game_id, user_id, body, kind, created_at
 `;
 
 module.exports = {
@@ -188,6 +269,9 @@ module.exports = {
   listConversations,
   listMessages,
   insertMessage,
+  todayFilings,
+  standingsToday,
+  insertStandings,
   latestMessageId,
   markRead,
   listReactions,

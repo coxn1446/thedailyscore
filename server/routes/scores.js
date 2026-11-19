@@ -23,6 +23,25 @@ module.exports = () => {
     }
   });
 
+  router.get('/today', requireAuth, async (req, res, next) => {
+    try {
+      const payload = await scoreService.todayScores(req.user.user_id, req.user.timezone || 'UTC');
+      return res.json(payload);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  router.get('/recap', requireAuth, async (req, res, next) => {
+    try {
+      const period = req.query.period === 'week' ? 'week' : 'today';
+      const payload = await scoreService.recap(req.user.user_id, req.user.timezone || 'UTC', period);
+      return res.json(payload);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
   router.get('/gazette', requireAuth, async (req, res, next) => {
     try {
       const payload = await scoreService.gazette(req.user.user_id);
@@ -94,7 +113,8 @@ module.exports = () => {
         req.body?.paste,
         new Date(),
         groups,
-        req.user.timezone || 'UTC'
+        req.user.timezone || 'UTC',
+        req.body?.image_url
       );
       return res.json(payload);
     } catch (err) {

@@ -2,24 +2,26 @@ import { Browser } from '@capacitor/browser';
 import { Capacitor } from '@capacitor/core';
 import { AUTH_USER_KEY, cacheClear, cacheGet, cacheSet } from '../utils/sessionCache';
 import { removeRegisteredDevice } from './deviceHelpers';
+import { clearSessionRetry } from './sessionClient';
+
+export { fetchCurrentUser } from './sessionClient';
 
 const rememberUser = (user) => {
   if (user) cacheSet(AUTH_USER_KEY, user);
 };
 
-export const fetchCurrentUser = async () => {
-  const cached = cacheGet(AUTH_USER_KEY);
-  if (cached) return cached;
-  try {
-    const res = await fetch('/api/auth/me', { credentials: 'include' });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const user = data.user || null;
-    rememberUser(user);
-    return user;
-  } catch {
-    return cacheGet(AUTH_USER_KEY) || null;
-  }
+export const acceptPolicies = async () => {
+  const res = await fetch('/api/auth/policies', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ acceptedPolicies: true }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Could not save your agreement');
+  clearSessionRetry();
+  rememberUser(data.user);
+  return data.user;
 };
 
 export const loginWithPassword = async (identifier, password) => {
@@ -31,6 +33,7 @@ export const loginWithPassword = async (identifier, password) => {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Login failed');
+  clearSessionRetry();
   rememberUser(data.user);
   return data.user;
 };
@@ -58,6 +61,7 @@ export const registerWithPassword = async ({
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Registration failed');
+  clearSessionRetry();
   rememberUser(data.user);
   return data.user;
 };
@@ -87,6 +91,7 @@ export const logout = async () => {
     /* still sign out */
   }
   cacheClear();
+  clearSessionRetry();
   try {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
   } catch {

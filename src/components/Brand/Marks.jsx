@@ -8,6 +8,14 @@ export const HomeMark = ({ className = 'h-5 w-5' }) => (
   </svg>
 );
 
+export const BoardMark = ({ className = 'h-5 w-5' }) => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className={frame(className)} fill="none">
+    <line x1="4" y1="6" x2="20" y2="6" stroke="currentColor" strokeWidth="1.5" />
+    <line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="1.5" />
+    <line x1="4" y1="18" x2="14" y2="18" stroke="currentColor" strokeWidth="1.5" />
+  </svg>
+);
+
 export const GroupsMark = ({ className = 'h-5 w-5' }) => (
   <svg aria-hidden="true" viewBox="0 0 24 24" className={frame(className)} fill="none">
     <circle cx="8" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.5" />
@@ -34,6 +42,38 @@ export const CloseMark = ({ className = 'h-5 w-5' }) => (
   <svg aria-hidden="true" viewBox="0 0 24 24" className={frame(className)} fill="none">
     <line x1="5.5" y1="5.5" x2="18.5" y2="18.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
     <line x1="18.5" y1="5.5" x2="5.5" y2="18.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
+  </svg>
+);
+
+export const LikeMark = ({ className = 'h-5 w-5', filled = false }) => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className={frame(className)} fill={filled ? 'currentColor' : 'none'}>
+    <path
+      d="M12 20.2l-1.2-1.1C6 15.1 3 12.3 3 8.7 3 5.8 5.2 3.6 8.1 3.6c1.6 0 3.2.8 3.9 2 .7-1.2 2.3-2 3.9-2C18.8 3.6 21 5.8 21 8.7c0 3.6-3 6.4-7.8 10.4L12 20.2z"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinejoin="miter"
+    />
+  </svg>
+);
+
+export const CommentMark = ({ className = 'h-5 w-5' }) => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className={frame(className)} fill="none">
+    <path d="M4 5h16v11H8.5L4 19.5V5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="miter" />
+  </svg>
+);
+
+export const MediaMark = ({ className = 'h-5 w-5' }) => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className={frame(className)} fill="none">
+    <rect x="3.5" y="5" width="17" height="14" stroke="currentColor" strokeWidth="1.5" />
+    <circle cx="8.5" cy="9.5" r="1.6" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M4 16.5l4.2-3.2 3 2.2 3.2-2.4L20 16.5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="miter" />
+  </svg>
+);
+
+export const CopyMark = ({ className = 'h-5 w-5' }) => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className={frame(className)} fill="none">
+    <rect x="8" y="8" width="11" height="12" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M6 16H5V4h11v2" stroke="currentColor" strokeWidth="1.5" />
   </svg>
 );
 
@@ -86,6 +126,15 @@ export const HahaMark = ({ className = 'h-4 w-4' }) => (
     <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
     <path d="M7.5 9l2 1.5-2 1.5M16.5 9l-2 1.5 2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="square" />
     <path d="M7.5 14.5c1 2.2 2.5 3 4.5 3s3.5-.8 4.5-3H7.5z" stroke="currentColor" strokeWidth="1.4" className="fill-current" fillOpacity="0.12" />
+  </svg>
+);
+
+export const AdminMark = ({ className = 'h-5 w-5' }) => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className={frame(className)} fill="none">
+    <rect x="4" y="3.5" width="16" height="17" stroke="currentColor" strokeWidth="1.5" />
+    <line x1="8" y1="8" x2="16" y2="8" stroke="currentColor" strokeWidth="1.5" />
+    <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" strokeWidth="1.5" />
+    <line x1="8" y1="16" x2="13" y2="16" stroke="currentColor" strokeWidth="1.5" />
   </svg>
 );
 

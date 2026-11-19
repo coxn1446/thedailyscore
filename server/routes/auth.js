@@ -138,6 +138,20 @@ module.exports = () => {
     }
   });
 
+  router.post('/policies', async (req, res, next) => {
+    if (!req.isAuthenticated || !req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    try {
+      const user = await authService.acceptCurrentPolicies(req.user.user_id, {
+        acceptedPolicies: req.body?.acceptedPolicies,
+      });
+      return res.json({ user });
+    } catch (err) {
+      return next(err);
+    }
+  });
+
   router.post('/native-session-handoff', nativeSessionHandoff);
 
   router.get('/google', (req, res, next) => {

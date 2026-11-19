@@ -6,9 +6,10 @@
 require('dotenv').config({ quiet: true });
 const os = require('os');
 
-const DEFAULT_PROD_URL = 'https://thedailyscore.com';
-const DEFAULT_QA_URL = 'https://qa.thedailyscore.com';
+const DEFAULT_PROD_URL = 'https://thedailyscore.site';
+const DEFAULT_QA_URL = 'https://qa.thedailyscore.site';
 const LOCALHOST_DEV_URL = 'http://localhost:3000';
+const DEFAULT_DEV_URL = 'http://192.168.1.171:3000';
 const DEV_CLIENT_PORT = 3000;
 
 const SKIP_IFACE = /^(lo|utun|awdl|llw|bridge|vnic|ap|p2p|anpi|dummy|docker|veth|br-)/i;
@@ -41,9 +42,8 @@ function getLanIPv4(ifaces = os.networkInterfaces()) {
   return null;
 }
 
-function getDefaultDevServerUrl(ifaces = os.networkInterfaces()) {
-  const ip = getLanIPv4(ifaces);
-  return ip ? `http://${ip}:${DEV_CLIENT_PORT}` : LOCALHOST_DEV_URL;
+function getDefaultDevServerUrl() {
+  return DEFAULT_DEV_URL;
 }
 
 /** Virtual host for Capacitor `server.hostname` and native OAuth deep links. */
@@ -51,7 +51,8 @@ const NATIVE_OAUTH_APP_HOST = 'thedailyscore.com';
 
 const DEFAULT_ALLOW_NAVIGATION_HOSTS = [
   NATIVE_OAUTH_APP_HOST,
-  'qa.thedailyscore.com',
+  'thedailyscore.site',
+  'qa.thedailyscore.site',
   'accounts.google.com',
   'appleid.apple.com',
 ];
@@ -108,21 +109,21 @@ function getCapacitorFlavorConfig(env = process.env) {
   switch (flavor) {
     case 'prod':
       resolved = {
-        appId: 'co.thedailyscore.thedailyscore.prod',
+        appId: 'site.thedailyscore.prod',
         appName: 'The Daily Score',
         serverUrl: prodUrl || DEFAULT_PROD_URL,
       };
       break;
     case 'qa':
       resolved = {
-        appId: 'co.thedailyscore.thedailyscore.qa',
+        appId: 'site.thedailyscore.qa',
         appName: 'The Daily Score QA',
         serverUrl: qaUrl || DEFAULT_QA_URL,
       };
       break;
     default:
       resolved = {
-        appId: 'co.thedailyscore.thedailyscore.dev',
+        appId: 'site.thedailyscore.dev',
         appName: 'The Daily Score Dev',
         serverUrl: devUrl,
       };
@@ -151,6 +152,7 @@ module.exports = {
   DEFAULT_PROD_URL,
   DEFAULT_QA_URL,
   LOCALHOST_DEV_URL,
+  DEFAULT_DEV_URL,
   DEV_CLIENT_PORT,
   NATIVE_OAUTH_APP_HOST,
 };

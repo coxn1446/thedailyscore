@@ -18,6 +18,7 @@ function getDevelopmentClientOrigins() {
   return [
     'https://localhost:3000',
     'http://localhost:3000',
+    'http://192.168.1.171:3000',
     'capacitor://localhost',
     'ionic://localhost',
     ...parseDevClientOrigins(),

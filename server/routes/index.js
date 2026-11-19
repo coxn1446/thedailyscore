@@ -4,10 +4,14 @@ const usersRoutes = require('./users');
 const uploadsRoutes = require('./uploads');
 const groupsRoutes = require('./groups');
 const scoresRoutes = require('./scores');
+const feedRoutes = require('./feed');
 const profileRoutes = require('./profile');
 const gameRequestRoutes = require('./gameRequests');
 const deviceRoutes = require('./devices');
 const internalRoutes = require('./internal');
+const friendRoutes = require('./friends');
+const boardRoutes = require('./board');
+const adminRoutes = require('./admin');
 const { isDbHealthy } = require('../db');
 
 module.exports = () => {
@@ -41,10 +45,14 @@ module.exports = () => {
   router.use('/uploads', uploadsRoutes());
   router.use('/groups', groupsRoutes());
   router.use('/scores', scoresRoutes());
+  router.use('/feed', feedRoutes());
   router.use('/profile', profileRoutes());
   router.use('/game-requests', gameRequestRoutes());
   router.use('/devices', deviceRoutes());
   router.use('/internal', internalRoutes());
+  router.use('/friends', friendRoutes());
+  router.use('/board', boardRoutes());
+  router.use('/admin', adminRoutes());
 
   return router;
 };

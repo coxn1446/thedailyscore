@@ -2,7 +2,7 @@
   "name": "thedailyscore",
   "version": "0.1.0",
   "private": true,
-  "description": "The Daily Score — paste a daily-game result and publish it to the groups that track that game.",
+  "description": "The Daily Score — paste a daily-game result and file it on the global leaderboard.",
   "main": "serverIndex.js",
   "engines": {
     "node": ">=22"
@@ -16,10 +16,12 @@
     "preview": "vite preview",
     "test": "jest",
     "db:migrate": "node scripts/db-migrate.js",
-    "s:prod": "CAP_APP_ENV=prod npx cap sync ios && CAP_APP_ENV=prod node scripts/sync-ios-bundle-settings.js",
-    "s:qa": "CAP_APP_ENV=qa npx cap sync ios && CAP_APP_ENV=qa node scripts/sync-ios-bundle-settings.js",
-    "s:dev": "CAP_APP_ENV=dev npx cap sync ios && CAP_APP_ENV=dev node scripts/sync-ios-bundle-settings.js",
-    "s": "npm run s:dev"
+    "s:prod": "CAP_APP_ENV=prod npx cap sync ios && CAP_APP_ENV=prod node scripts/sync-ios-bundle-settings.js && CAP_APP_ENV=prod node scripts/sync-ios-google-service-info.js",
+    "s:qa": "CAP_APP_ENV=qa npx cap sync ios && CAP_APP_ENV=qa node scripts/sync-ios-bundle-settings.js && CAP_APP_ENV=qa node scripts/sync-ios-google-service-info.js",
+    "s:dev": "CAP_APP_ENV=dev npx cap sync ios && CAP_APP_ENV=dev node scripts/sync-ios-bundle-settings.js && CAP_APP_ENV=dev node scripts/sync-ios-google-service-info.js",
+    "s": "npm run s:dev",
+    "deploy:qa": "gcloud builds submit --project=thedailyscore-528401 --config=cloudbuild-qa.yaml",
+    "deploy:prod": "gcloud builds submit --project=thedailyscore-528401 --config=cloudbuild-prod.yaml"
   },
   "nodemonConfig": {
     "watch": [

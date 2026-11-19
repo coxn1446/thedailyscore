@@ -103,18 +103,19 @@ describe('Groups', () => {
     });
 
     renderGroups();
-    expect(await screen.findByRole('heading', { name: 'No syndicates.' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'No Groups' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Wordle' })).toHaveClass('brand-check');
     await user.click(screen.getByRole('checkbox', { name: 'Wordle' }));
     await user.click(screen.getByRole('checkbox', { name: 'Krillion' }));
     await user.type(screen.getByLabelText('Name'), 'Sunday desk');
     await user.type(screen.getByLabelText('Tagline'), 'A weekly register');
+    expect(screen.queryByLabelText('Handles')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Create a Group' }));
 
     await waitFor(() => {
       expect(charterGroup).toHaveBeenCalledWith({
         name: 'Sunday desk',
         tagline: 'A weekly register',
-        handles: '',
         games: ['wordle', 'krillion'],
       });
     });
@@ -175,10 +176,12 @@ describe('Groups', () => {
     expect(await screen.findByRole('img', { name: 'Unread' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Parlor' })).toHaveTextContent('2');
     expect(screen.getByRole('button', { name: 'Today' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('navigation', { name: 'Games' })).toHaveClass('bg-module');
+    expect(screen.getByRole('navigation', { name: 'Time period' }).parentElement).toHaveClass('bg-inset');
     expect(screen.queryByRole('button', { name: 'Map Tap' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Week' }));
-    expect(screen.getByRole('heading', { name: 'Four scores make the board.' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Nothing filed.' })).toBeInTheDocument();
   });
 
   test('keeps the game when switching groups and shows the published score', async () => {
@@ -447,5 +450,156 @@ describe('Groups', () => {
     expect(screen.getByRole('link', { name: 'here' })).toHaveAttribute('href', '/');
     expect(within(chatGames).getByRole('button', { name: 'Krillion' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('heading', { name: 'Sunday desk - Krillion' })).toBeInTheDocument();
+  });
+
+  test('lists an unsolved Wordle today and a summary across the week', async () => {
+    const user = userEvent.setup();
+    fetchGroups.mockResolvedValue({
+      groups: [{
+        group_id: 3,
+        name: 'Sunday desk',
+        member_count: 2,
+        score_count_today: 1,
+        enabled_games: [{ slug: 'wordle', name: 'Wordle' }],
+        standings: [{ slug: 'wordle', rank_basis: 'guesses', daily_rank: 1, daily_solved: false }],
+      }],
+      games,
+    });
+    fetchGroup.mockResolvedValue({
+      group: {
+        group_id: 3,
+        name: 'Sunday desk',
+        member_count: 2,
+        score_count_today: 1,
+        archived: false,
+        role: 'fellow',
+      },
+      games: [{
+        game_id: 1,
+        slug: 'wordle',
+        name: 'Wordle',
+        rank_basis: 'guesses',
+        board: 'weekly',
+        min_entries: 4,
+        enabled: true,
+      }],
+      members: [],
+      board: {
+        slug: 'wordle',
+        name: 'Wordle',
+        enabled: true,
+        rank_basis: 'guesses',
+        daily_entries: [{
+          user_id: 4,
+          score_id: 9,
+          display_name: 'Will',
+          rank: 1,
+          guesses: null,
+          solved: false,
+          snippet: '🟩🟩⬜🟩🟩',
+          played_on: '2026-09-30',
+          mine: true,
+        }],
+        weekly_entries: [{
+          user_id: 4,
+          score_id: 4,
+          display_name: 'Will',
+          rank: 1,
+          layout: 'summary',
+          best: 3,
+          average: 4.5,
+          played: 2,
+          mine: true,
+        }],
+        entries: [],
+      },
+    });
+
+    renderGroups('/groups/3?game=wordle&period=today');
+    const register = await screen.findByTestId('group-register');
+    expect(within(register).getByText('X/6')).toBeInTheDocument();
+    expect(within(register).getByText('🟩🟩⬜🟩🟩')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Week' }));
+    const week = await screen.findByTestId('group-register');
+    expect(within(week).getByText('Best')).toBeInTheDocument();
+    expect(within(week).getByText('Avg')).toBeInTheDocument();
+    expect(within(week).getByText('Played')).toBeInTheDocument();
+    expect(within(week).getByText('3/6')).toBeInTheDocument();
+    expect(within(week).getByText('4.5')).toBeInTheDocument();
+    await user.click(within(week).getByRole('button', { name: 'How this average is calculated' }));
+    expect(within(week).getByRole('tooltip')).toHaveTextContent('miss counts as 7');
+    expect(within(week).queryByText('🟩🟩⬜🟩🟩')).not.toBeInTheDocument();
+  });
+
+  test('toggles a points week between every score and the totals, and shows the all-time formula', async () => {
+    const user = userEvent.setup();
+    fetchGroups.mockResolvedValue({
+      groups: [{
+        group_id: 3,
+        name: 'Sunday desk',
+        member_count: 2,
+        score_count_today: 1,
+        enabled_games: [{ slug: 'krillion', name: 'Krillion' }],
+        standings: [{ slug: 'krillion', rank_basis: 'score', daily_rank: 1, weekly_rank: 1, all_time_rank: 2 }],
+      }],
+      games,
+    });
+    fetchGroup.mockResolvedValue({
+      group: {
+        group_id: 3,
+        name: 'Sunday desk',
+        member_count: 2,
+        score_count_today: 1,
+        archived: false,
+        role: 'fellow',
+      },
+      games: [{
+        game_id: 2,
+        slug: 'krillion',
+        name: 'Krillion',
+        rank_basis: 'score',
+        board: 'daily',
+        enabled: true,
+      }],
+      members: [],
+      board: {
+        slug: 'krillion',
+        name: 'Krillion',
+        enabled: true,
+        rank_basis: 'score',
+        weekly_entries: [
+          { user_id: 4, score_id: 1, display_name: 'Will', rank: 1, score: 400, played_on: '2026-09-02', mine: true },
+          { user_id: 8, score_id: 2, display_name: 'Ada', rank: 2, score: 250, played_on: '2026-09-03', mine: false },
+        ],
+        weekly_leaderboard: [
+          { user_id: 4, score_id: 4, display_name: 'Will', rank: 1, total: 400, score: 400, mine: true },
+          { user_id: 8, score_id: 8, display_name: 'Ada', rank: 2, total: 250, score: 250, mine: false },
+        ],
+        all_time_entries: [],
+        all_time_leaderboard: [
+          { user_id: 8, score_id: 8, display_name: 'Ada', rank: 1, average: 80, multiplier: 100, weighted: 80, mine: false },
+          { user_id: 4, score_id: 4, display_name: 'Will', rank: 2, average: 100, multiplier: 40, weighted: 40, mine: true },
+        ],
+      },
+    });
+
+    renderGroups('/groups/3?game=krillion&period=week');
+    const scores = await screen.findByTestId('group-register');
+    expect(within(scores).getByRole('button', { name: 'Scores' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(scores).getByText('400')).toBeInTheDocument();
+    expect(within(scores).queryByText('Total')).not.toBeInTheDocument();
+
+    await user.click(within(scores).getByRole('button', { name: 'Leaderboard' }));
+    const totals = await screen.findByTestId('group-register');
+    expect(within(totals).getByText('Total')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'All time' }));
+    const allTime = await screen.findByTestId('group-register');
+    expect(within(allTime).queryByText('Average × multiplier')).not.toBeInTheDocument();
+    expect(within(allTime).getByText('40%')).toBeInTheDocument();
+    expect(within(allTime).getAllByText('80')).toHaveLength(2);
+    await user.click(within(allTime).getAllByRole('button', { name: 'How this average is calculated' })[0]);
+    expect(within(allTime).getByRole('tooltip')).toHaveTextContent('turned on');
   });
 });

@@ -16,6 +16,7 @@ const GAME_FIELDS = `
   ga.name,
   ga.sort_direction,
   ga.rank_basis,
+  ga.guess_cap,
   ga.board,
   ga.min_entries,
   ga.resets_at,
@@ -40,8 +41,16 @@ const insertCurator = `
 `;
 
 const insertGroupGame = `
-  INSERT INTO group_games (group_id, game_id, enabled)
-  VALUES ($1, $2, $3)
+  INSERT INTO group_games (group_id, game_id, enabled, active_on)
+  VALUES (
+    $1,
+    $2,
+    $3,
+    CASE
+      WHEN $3 THEN (NOW() AT TIME ZONE (SELECT timezone FROM groups WHERE group_id = $1))::date
+      ELSE NULL
+    END
+  )
 `;
 
 const insertFellow = `
@@ -183,10 +192,18 @@ const deleteMember = `
 `;
 
 const setGroupGameEnabled = `
-  UPDATE group_games
-  SET enabled = $3
-  WHERE group_id = $1 AND game_id = $2
-  RETURNING group_id, game_id, enabled
+  UPDATE group_games gg
+  SET
+    enabled = $3,
+    active_on = CASE
+      WHEN $3 IS TRUE AND gg.active_on IS NULL THEN (NOW() AT TIME ZONE g.timezone)::date
+      ELSE gg.active_on
+    END
+  FROM groups g
+  WHERE gg.group_id = g.group_id
+    AND gg.group_id = $1
+    AND gg.game_id = $2
+  RETURNING gg.group_id, gg.game_id, gg.enabled
 `;
 
 const archiveGroup = `

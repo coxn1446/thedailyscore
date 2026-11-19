@@ -5,20 +5,23 @@ import toast, { Toaster } from 'react-hot-toast';
 import { Browser } from '@capacitor/browser';
 import { Capacitor } from '@capacitor/core';
 import { clearUser, selectAuthLoading, selectIsAuthenticated, selectUser, setUser } from '../store/auth.reducer';
+import { applyNightMode } from '../utils/nightMode';
 import { completeNativeOAuthSessionHandoff, fetchCurrentUser } from '../helpers/authHelpers';
-import { needsHandle } from '../helpers/identity';
+import { onSessionLost } from '../helpers/sessionClient';
+import { needsHandle, needsPolicy } from '../helpers/identity';
 import { pathFromIncomingAppUrl, stripOAuthHandoffFromInternalPath } from '../utils/dailyScoreAppUrl';
+import { signedOutLoginTarget } from '../helpers/accountDeleted';
 import { safeInternalPath } from '../utils/internalPath';
+import PolicyAcceptanceDialog from './Auth/PolicyAcceptanceDialog';
 import ContentArea from './Layout/ContentArea';
 import Loading from './Loading/Loading';
 import SocketWatcher from './Realtime/SocketWatcher';
 import PushWatcher from './Realtime/PushWatcher';
 
 const Home = lazy(() => import('../routes/Home'));
-const Groups = lazy(() => import('../routes/Groups'));
-const Messages = lazy(() => import('../routes/Messages'));
-const GroupGovernance = lazy(() => import('../routes/GroupGovernance'));
-const JoinGroup = lazy(() => import('../routes/JoinGroup'));
+const Post = lazy(() => import('../routes/Post'));
+const Board = lazy(() => import('../routes/Board'));
+const Admin = lazy(() => import('../routes/Admin'));
 const Profile = lazy(() => import('../routes/Profile'));
 const RequestGame = lazy(() => import('../routes/RequestGame'));
 const Login = lazy(() => import('../routes/Login'));
@@ -30,6 +33,10 @@ const TermsOfService = lazy(() =>
   import('../routes/Legal').then((mod) => ({ default: mod.TermsOfService }))
 );
 const Privacy = lazy(() => import('../routes/Legal').then((mod) => ({ default: mod.Privacy })));
+const AccountDeletion = lazy(() =>
+  import('../routes/Legal').then((mod) => ({ default: mod.AccountDeletion }))
+);
+const Support = lazy(() => import('../routes/Legal').then((mod) => ({ default: mod.Support })));
 
 const GuestOnlyRoute = ({ children }) => {
   const isAuthenticated = useSelector(selectIsAuthenticated);
@@ -54,8 +61,8 @@ const ProtectedRoute = ({ children }) => {
 
   if (isLoading) return <Loading />;
   if (!isAuthenticated) {
-    const next = encodeURIComponent(`${location.pathname}${location.search}`);
-    return <Navigate to={`/login?next=${next}`} replace />;
+    const target = signedOutLoginTarget(location.pathname, location.search);
+    return <Navigate to={target.to} replace state={target.state || undefined} />;
   }
   if (needsHandle(user)) return <Navigate to="/register" replace />;
   return children;
@@ -74,7 +81,18 @@ const IndexRoute = () => {
 const App = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const user = useSelector(selectUser);
+  const authLoading = useSelector(selectAuthLoading);
   const lastHandledAppUrlRef = useRef(null);
+
+  useEffect(() => {
+    if (authLoading) return;
+    applyNightMode(user?.night_mode === true);
+  }, [authLoading, user?.night_mode]);
+
+  useEffect(() => onSessionLost(() => {
+    dispatch(clearUser());
+  }), [dispatch]);
 
   useEffect(() => {
     const loadSession = async () => {
@@ -150,13 +168,34 @@ const App = () => {
 
   return (
     <>
-      <Toaster position="top-center" />
+      <Toaster
+        position="top-center"
+        containerStyle={{ top: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
+        toastOptions={{
+          style: {
+            background: 'var(--color-background)',
+            color: 'var(--color-primary)',
+            border: '1px solid var(--color-primary)',
+            borderRadius: 0,
+            boxShadow: 'none',
+            fontFamily: 'var(--font-sans)',
+          },
+        }}
+      />
       <SocketWatcher />
       <PushWatcher />
       <ContentArea>
         <Suspense fallback={<Loading />}>
           <Routes>
             <Route path="/" element={<IndexRoute />} />
+            <Route
+              path="/post/:scoreId"
+              element={
+                <ProtectedRoute>
+                  <Post />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/login"
               element={
@@ -166,48 +205,39 @@ const App = () => {
               }
             />
             <Route path="/register" element={<Register />} />
+            <Route path="/accept-policies" element={<Navigate to="/" replace />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/terms" element={<TermsOfService />} />
             <Route path="/privacy" element={<Privacy />} />
+            <Route path="/account-deletion" element={<AccountDeletion />} />
+            <Route path="/support" element={<Support />} />
             <Route
-              path="/groups"
+              path="/board"
               element={
                 <ProtectedRoute>
-                  <Groups />
+                  <Board />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/groups" element={<Navigate to="/board" replace />} />
+            <Route path="/groups/*" element={<Navigate to="/board" replace />} />
+            <Route path="/messages" element={<Navigate to="/board" replace />} />
+            <Route path="/join/:token" element={<Navigate to="/board" replace />} />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <Admin />
                 </ProtectedRoute>
               }
             />
             <Route
-              path="/messages"
+              path="/profile/:handle"
               element={
                 <ProtectedRoute>
-                  <Messages />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/groups/:groupId/governance"
-              element={
-                <ProtectedRoute>
-                  <GroupGovernance />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/groups/:groupId"
-              element={
-                <ProtectedRoute>
-                  <Groups />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/join/:token"
-              element={
-                <ProtectedRoute>
-                  <JoinGroup />
+                  <Profile />
                 </ProtectedRoute>
               }
             />
@@ -231,6 +261,7 @@ const App = () => {
           </Routes>
         </Suspense>
       </ContentArea>
+      {needsPolicy(user) && !needsHandle(user) ? <PolicyAcceptanceDialog /> : null}
     </>
   );
 };

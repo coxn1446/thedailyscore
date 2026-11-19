@@ -1,5 +1,4 @@
 import { createSlice } from '@reduxjs/toolkit';
-import { AUTH_USER_KEY, cacheGet } from '../utils/sessionCache';
 
 export const defaultAuthState = {
   user: null,
@@ -7,15 +6,8 @@ export const defaultAuthState = {
   isLoading: true,
 };
 
-export const getAuthInitialState = () => {
-  const cachedUser = cacheGet(AUTH_USER_KEY);
-  if (!cachedUser) return { ...defaultAuthState };
-  return {
-    user: cachedUser,
-    isAuthenticated: true,
-    isLoading: false,
-  };
-};
+// The desk waits for GET /api/auth/me before a saved reader counts as signed in.
+export const getAuthInitialState = () => ({ ...defaultAuthState });
 
 const authSlice = createSlice({
   name: 'auth',

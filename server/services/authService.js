@@ -396,6 +396,31 @@ const findOrCreateOAuthUser = async (provider, profile) => {
   }
 };
 
+const acceptCurrentPolicies = async (userId, { acceptedPolicies } = {}) => {
+  requireDb();
+  if (!userId) {
+    const err = new Error('Not authenticated');
+    err.status = 401;
+    throw err;
+  }
+  if (acceptedPolicies !== true) {
+    const err = new Error('You must accept the Terms of Service and Privacy Policy');
+    err.status = 400;
+    throw err;
+  }
+  const { rows } = await query(userQueries.acceptPolicies, [
+    userId,
+    CURRENT_TOS_VERSION,
+    CURRENT_PRIVACY_VERSION,
+  ]);
+  if (!rows[0]) {
+    const err = new Error('User not found');
+    err.status = 404;
+    throw err;
+  }
+  return sanitizeUser(rows[0]);
+};
+
 const claimHandle = async (userId, { handle, timezone, displayName, acceptedPolicies }) => {
   requireDb();
   if (!userId) {
@@ -585,6 +610,7 @@ module.exports = {
   profileFromAppleCallback,
   findOrCreateOAuthUser,
   claimHandle,
+  acceptCurrentPolicies,
   normalizeHandle,
   normalizeTimezone,
   NATIVE_OAUTH_APP_HOST,

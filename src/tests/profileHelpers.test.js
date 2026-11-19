@@ -30,7 +30,9 @@ describe('profileHelpers', () => {
     );
 
     const file = new File(['img'], 'portrait.png', { type: 'image/png' });
-    await expect(uploadPortrait(file)).resolves.toBe('/uploads/portrait.png');
+    const steps = [];
+    await expect(uploadPortrait(file, (value) => steps.push(value))).resolves.toBe('/uploads/portrait.png');
+    expect(steps).toEqual([50, 100]);
     const [, options] = global.fetch.mock.calls[1];
     expect(options.method).toBe('POST');
     expect(options.headers).toBeUndefined();

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { inkButtonClass, ruleButtonClass } from '../Auth/AuthPageLayout';
-import { inviteUrl } from '../../helpers/groupHelpers';
+import { checkboxClass, inkButtonClass, ruleButtonClass } from '../Auth/AuthPageLayout';
+import { inviteShareText } from '../../helpers/groupHelpers';
 import { copyText } from '../../utils/copyText';
 
 const titleFieldClass =
@@ -63,7 +63,7 @@ const GovernanceDesk = ({
 
   const copyLink = async () => {
     try {
-      await copyText(inviteUrl(group.invite_token));
+      await copyText(inviteShareText(group.name, group.invite_token));
       toast.success('Invite link copied');
     } catch {
       toast.error('Could not copy invite link');
@@ -159,7 +159,7 @@ const GovernanceDesk = ({
                   onChange={(event) =>
                     setDraftGames((current) => ({ ...current, [game.slug]: event.target.checked }))
                   }
-                  className="h-4 w-4 border border-primary"
+                  className={checkboxClass}
                 />
               </label>
             </li>
@@ -196,6 +196,7 @@ const GovernanceDesk = ({
       {tab === 'controls' ? (
         <div className="mt-space-lg space-y-space-lg">
           <div className="space-y-space-sm">
+            <p className="font-sans text-kicker uppercase tracking-kicker text-muted">Notifications</p>
             <SlideToggle
               label="Messages"
               on={group.alert_messages !== false}

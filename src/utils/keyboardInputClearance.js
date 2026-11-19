@@ -7,6 +7,18 @@ export function isKeyboardField(target) {
   return target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement;
 }
 
+export function composerBottom(form, keyboardHeight = 0) {
+  const viewport = typeof window !== 'undefined' ? window.visualViewport : null;
+  const visibleBottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
+  const covered = Math.max(0, window.innerHeight - visibleBottom);
+  const lift = Math.max(covered, Number(keyboardHeight) || 0);
+  const limit = window.innerHeight - lift;
+  const parent = form?.offsetParent;
+  const rect = parent?.getBoundingClientRect?.();
+  const parentBottom = rect && rect.height > 0 ? rect.bottom : window.innerHeight;
+  return Math.max(0, parentBottom - limit);
+}
+
 export function measureKeyboardClearance() {
   if (typeof window === 'undefined') return 0;
   const viewport = window.visualViewport;

@@ -112,6 +112,9 @@ const presentGames = (rows) =>
     name: row.name,
     sort_direction: row.sort_direction,
     rank_basis: row.rank_basis,
+    ...(row.guess_cap !== undefined
+      ? { guess_cap: row.guess_cap == null ? null : Number(row.guess_cap) }
+      : {}),
     board: row.board,
     min_entries: row.min_entries == null ? null : Number(row.min_entries),
     resets_at: row.resets_at,

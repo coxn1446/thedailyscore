@@ -1,4 +1,4 @@
-import { addGroupMember, charterGroup, fetchArchivedGroups, fetchGroup, fetchGroupDay, fetchGroups, inviteUrl, joinGroup, renameGroup, unarchiveGroup, updateGroupGames } from '../helpers/groupHelpers';
+import { addGroupMember, charterGroup, fetchArchivedGroups, fetchGroup, fetchGroupDay, fetchGroups, inviteShareText, inviteUrl, joinGroup, renameGroup, unarchiveGroup, updateGroupGames } from '../helpers/groupHelpers';
 
 describe('groupHelpers', () => {
   beforeEach(() => {
@@ -95,5 +95,8 @@ describe('groupHelpers', () => {
 
   test('builds an invite link', () => {
     expect(inviteUrl('abc')).toBe(`${window.location.origin}/join/abc`);
+    expect(inviteShareText('Sunday desk', 'abc')).toBe(
+      `Please join my group Sunday desk on The Daily Score\n${window.location.origin}/join/abc`
+    );
   });
 });

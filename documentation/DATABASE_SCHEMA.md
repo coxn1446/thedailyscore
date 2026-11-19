@@ -1,6 +1,6 @@
 # Database Schema Documentation
 
-Last Updated: 2026-09-28
+Last Updated: 2026-11-19
 
 Local database name: `thedailyscore`.
 
@@ -25,9 +25,12 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
   - remind_daily (BOOLEAN NOT NULL DEFAULT TRUE) — 8pm reminder when no score was posted on the local date
   - alert_crown (BOOLEAN NOT NULL DEFAULT TRUE) — push when someone else takes rank 1 on one game’s board
   - alert_new_member (BOOLEAN NOT NULL DEFAULT FALSE) — push when someone else joins a group
+  - notifications (BOOLEAN NOT NULL DEFAULT TRUE) — account switch for every push
+  - night_mode (BOOLEAN NOT NULL DEFAULT FALSE) — account switch for the ink edition
+  - is_admin (BOOLEAN NOT NULL DEFAULT FALSE) — Admin nav and the game-request desk
   - suspended (BOOLEAN NOT NULL DEFAULT FALSE)
-  - tos_accepted_version (VARCHAR(32))
-  - privacy_accepted_version (VARCHAR(32))
+  - tos_accepted_version (VARCHAR(32)) — the Terms version the reader accepted. Null until they accept the current terms
+  - privacy_accepted_version (VARCHAR(32)) — the Privacy Policy version the reader accepted. Null until they accept the current policy
   - email_verified (BOOLEAN NOT NULL DEFAULT FALSE)
   - email_verify_token_hash (VARCHAR(64))
   - email_verify_expires_at (TIMESTAMPTZ)
@@ -48,7 +51,7 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
   - `users_dispatch_mode_check` allows `preview` or `auto`
 - **Foreign Keys**: None
 - **Triggers**: `users_set_updated_at` via `set_updated_at()`
-- **Last Modified**: 2026-09-27
+- **Last Modified**: 2026-11-16
 
 ### games
 
@@ -60,7 +63,8 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
   - sort_direction (VARCHAR(8) NOT NULL) — `lower` or `higher`
   - rank_basis (VARCHAR(16) NOT NULL) — `score` (a points total) or `guesses` (no points score)
   - board (VARCHAR(16) NOT NULL) — `daily` or `weekly`. Each game has its own board. There is no combined scoreboard.
-  - min_entries (INTEGER) — submissions required before a player is ranked. Null means every submission counts. Weekly guess boards use 4.
+  - min_entries (INTEGER) — kept on the catalog row. Wordle is 4. The board ranks every attempt and does not use this as a gate.
+  - guess_cap (INTEGER) — solved guesses must fall inside 1..cap when set. Wordle is 6. Null means the guess count is open.
   - resets_at (TIME NOT NULL DEFAULT '00:00') — day boundary in the group timezone. Midnight for every current game.
   - sort_order (INTEGER NOT NULL) — switcher order
 - **Indexes**:
@@ -71,14 +75,23 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
   - `games_rank_basis_check` allows `score` or `guesses`
   - `games_board_check` allows `daily` or `weekly`
   - `games_min_entries_check` requires null or a positive count
+  - `games_guess_cap_check` requires null or a positive cap
 - **Foreign Keys**: None
 - **Triggers**: None
 - **Seed**:
   - Map Tap — `higher`, `score`, `daily`, resets `00:00`
   - Krillion — `higher`, `score`, `daily`, resets `00:00`
   - Size it Up — `higher`, `score`, `daily`, resets `00:00`
-  - Wordle — `lower`, `guesses`, `weekly`, `min_entries` 4, resets `00:00`. The week runs Monday 00:00 to the next Monday 00:00 in the group timezone. A player needs four solved puzzles that week. Rank is the average guess count.
-- **Last Modified**: 2026-09-27
+  - Wordle — `lower`, `guesses`, `weekly`, `min_entries` 4, `guess_cap` 6, resets `00:00`. The week runs Monday 00:00 to the next Monday 00:00 in the group timezone. `min_entries` stays on the row. The board no longer uses it as a gate. A longer range ranks a consistency-weighted average. A miss counts as 7 in that average.
+  - Redactle — `lower`, `guesses`, `daily`, `guess_cap` null, resets `00:00`. Fewer guesses rank higher. A give-up keeps its guess count and ranks after every solve. A longer range averages solves only, then multiplies by the days since the game was turned on divided by the days filed, and by the days filed divided by the solves.
+  - Time Guesser — `higher`, `score`, `daily`, resets `00:00`. The share total out of 50,000 is the score. Higher wins.
+  - Semantle — `lower`, `guesses`, `daily`, no guess cap, resets `00:00`. Fewer guesses rank higher. A give-up keeps its guess count and ranks after every solve. #1 is 29 January 2022.
+  - Farflung — `higher`, `score`, `daily`, resets `00:00`. The share total out of 500 km is the score. Higher wins. #1 is 5 October 2026.
+  - Eraly — `higher`, `score`, `daily`, resets `00:00`. The share total out of 700 is the score. Higher wins. #1 is 16 October 2026.
+  - Fermi — `lower`, `score`, `daily`, resets `00:00`. The score is the geometric mean of the three multiples, each capped at 1,000×. Lower wins. #1 is 27 July 2026.
+  - Hivemind — `higher`, `score`, `daily`, resets `00:00`. The share total out of 1,000 is the score. Higher wins. #1 is 27 October 2026.
+  - Noillirk — `higher`, `score`, `daily`, resets `00:00`. The score is the printed altitude in metres. Higher wins. Daily #1 is 27 September 2026. A Classic climb files on the upload day. Endless is not filed.
+- **Last Modified**: 2026-11-19
 
 ### groups
 
@@ -128,6 +141,7 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
   - group_id (INTEGER NOT NULL)
   - game_id (INTEGER NOT NULL)
   - enabled (BOOLEAN NOT NULL DEFAULT TRUE)
+  - active_on (DATE) — the day this game was first turned on in the group. Attempt shares start here, not on the group’s charter day. Turning the game off does not clear it.
   - created_at (TIMESTAMPTZ NOT NULL DEFAULT NOW())
   - updated_at (TIMESTAMPTZ NOT NULL DEFAULT NOW())
 - **Indexes**:
@@ -137,11 +151,11 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
   - group_id → groups(group_id) ON DELETE CASCADE
   - game_id → games(game_id)
 - **Triggers**: `group_games_set_updated_at` via `set_updated_at()`
-- **Last Modified**: 2026-09-27
+- **Last Modified**: 2026-11-09
 
 ### scores
 
-- **Purpose**: One parsed result per player, game, and puzzle. A second paste of that puzzle is rejected. An older puzzle number backfills that day. `score` is the points total when the game’s `rank_basis` is `score`. `guesses` is the solve count when `rank_basis` is `guesses`. An unsolved guess game stores neither number and `solved` is false, so it stays out of the rank.
+- **Purpose**: One parsed result per player, game, and puzzle. A second paste of that puzzle is rejected. An older puzzle number backfills that day. `score` is the points total when the game’s `rank_basis` is `score`. `guesses` is the solve count when `rank_basis` is `guesses`. An unsolved Wordle stores neither number and `solved` is false. It still appears on a group board, as X/6 on a single day and inside the games-played count on a longer range. An unsolved Redactle stores its guess count, time, and hints.
 - **Columns**:
   - score_id (SERIAL PRIMARY KEY)
   - user_id (INTEGER NOT NULL)
@@ -149,26 +163,32 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
   - puzzle_number (INTEGER NOT NULL) — Map Tap counts calendar days since 21 June 2024
   - raw_paste (TEXT NOT NULL)
   - snippet (TEXT NOT NULL) — the share grid shown on Home
-  - score (INTEGER) — null for guess games
-  - guesses (INTEGER) — 1–6 when solved; null for score games and unsolved Wordle
+  - image_url (TEXT) — picture from `POST /api/uploads`. Null when the score has none
+  - score (NUMERIC(12, 2)) — null for guess games. Whole numbers for the points games. Fermi stores the printed multiple, such as 27.6 or 1.94.
+  - guesses (INTEGER) — 1–6 when a Wordle is solved; the open count for Redactle, including a give-up; null for score games and unsolved Wordle
   - solved (BOOLEAN NOT NULL DEFAULT TRUE)
-  - played_on (DATE NOT NULL) — the day the puzzle was posted. Krillion #1 is 16 July 2026. Map Tap #0 is 21 June 2024. Wordle 1 is 19 June 2021. Size It Up #1 is 4 September 2026. Not the upload day.
+  - duration_seconds (INTEGER) — seconds spent. Null when the share does not report a time.
+  - hints (INTEGER) — hints used. Null when the share does not report hints. Redactle sums every hint count on the line. `Hints: none` is 0.
+  - played_on (DATE NOT NULL) — the day the puzzle was posted. Krillion #1 is 16 July 2026. Map Tap #0 is 21 June 2024. Wordle’s share number is days since 19 June 2021, so Wordle 1927 is 28 September 2026. Size It Up #1 is 10 August 2026, so #100 is 17 November 2026. A Magnitudle Size It Up card uses the printed date, and that date as YYYYMMDD is the puzzle number. Redactle #1 is 7 April 2022. Time Guesser #1 is 1 June 2023, so #1258 is 9 November 2026. Semantle #1 is 29 January 2022. Farflung #1 is 5 October 2026, so #44 is 17 November 2026. Eraly #1 is 16 October 2026, so #33 is 17 November 2026. Fermi #1 is 27 July 2026, so #115 is 18 November 2026. Hivemind #1 is 27 October 2026, so #24 is 19 November 2026. Noillirk daily #1 is 27 September 2026, so #54 is 19 November 2026. A Classic Noillirk climb uses the upload date, and that date as YYYYMMDD is the puzzle number. A Size It Up card that is the title, then `#N`, then `Score:` uses that puzzle number. #100 is 17 November 2026. Not the upload day.
   - created_at (TIMESTAMPTZ NOT NULL DEFAULT NOW())
   - updated_at (TIMESTAMPTZ NOT NULL DEFAULT NOW())
 - **Indexes**:
   - scores_user_game_puzzle_uidx — unique (user_id, game_id, puzzle_number)
   - scores_game_puzzle_idx — Wordle board for one puzzle
   - scores_game_updated_idx — daily board by log time
+  - scores_created_idx — home feed, newest first
 - **Checks**:
   - `scores_puzzle_number_check` requires `puzzle_number >= 0`
   - `scores_score_check` requires a null or non-negative score
-  - `scores_guesses_check` requires null or 1–6
-  - `scores_value_check` allows a score, a guess count, or an unsolved row with both null
+  - `scores_guesses_check` requires null or 1–9999
+  - `scores_duration_check` requires null or a non-negative count of seconds
+  - `scores_hints_check` requires null or a non-negative count
+  - `scores_value_check` allows a score, a solved guess count, an unsolved row with both null, or an unsolved row that still has a guess count
 - **Foreign Keys**:
   - user_id → users(user_id)
   - game_id → games(game_id)
 - **Triggers**: `scores_set_updated_at` via `set_updated_at()`
-- **Last Modified**: 2026-09-27
+- **Last Modified**: 2026-11-18
 
 ### score_publications
 
@@ -187,6 +207,42 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
 - **Triggers**: None
 - **Last Modified**: 2026-09-27
 
+### score_likes
+
+- **Purpose**: One like per signed-in reader on a filed score. The home feed counts these rows.
+- **Columns**:
+  - score_id (INTEGER NOT NULL)
+  - user_id (INTEGER NOT NULL)
+  - created_at (TIMESTAMPTZ NOT NULL DEFAULT NOW())
+- **Indexes**:
+  - score_likes_pkey — (score_id, user_id)
+- **Checks**: None
+- **Foreign Keys**:
+  - score_id → scores(score_id) ON DELETE CASCADE
+  - user_id → users(user_id) ON DELETE CASCADE
+- **Triggers**: None
+- **Last Modified**: 2026-11-18
+
+### score_comments
+
+- **Purpose**: A short note on a filed score. The author can delete it. The post page lists these oldest first. A picture can stand in for the note.
+- **Columns**:
+  - comment_id (SERIAL PRIMARY KEY)
+  - score_id (INTEGER NOT NULL)
+  - user_id (INTEGER NOT NULL)
+  - body (TEXT NOT NULL) — trimmed length up to 500. Empty only when `image_url` is set
+  - image_url (TEXT) — picture from `POST /api/uploads`. Null when the comment has none
+  - created_at (TIMESTAMPTZ NOT NULL DEFAULT NOW())
+- **Indexes**:
+  - score_comments_score_created_idx — comments for one score, oldest first
+- **Checks**:
+  - `score_comments_body_check` requires a trimmed body of 1–500 characters, or an empty body when `image_url` is set
+- **Foreign Keys**:
+  - score_id → scores(score_id) ON DELETE CASCADE
+  - user_id → users(user_id) ON DELETE CASCADE
+- **Triggers**: None
+- **Last Modified**: 2026-11-18
+
 ### game_requests
 
 - **Purpose**: A signed-in reader asks for a daily game the parsers do not recognize yet.
@@ -195,6 +251,7 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
   - user_id (INTEGER NOT NULL)
   - game_name (VARCHAR(80) NOT NULL)
   - note (TEXT)
+  - seen (BOOLEAN NOT NULL DEFAULT FALSE) — false until an admin opens the request desk
   - created_at (TIMESTAMPTZ NOT NULL DEFAULT NOW())
 - **Indexes**:
   - game_requests_user_idx — requests by reader
@@ -202,7 +259,7 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
 - **Foreign Keys**:
   - user_id → users(user_id) ON DELETE CASCADE
 - **Triggers**: None
-- **Last Modified**: 2026-09-27
+- **Last Modified**: 2026-11-16
 
 ### parlors
 
@@ -221,23 +278,24 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
 
 ### parlor_messages
 
-- **Purpose**: Text messages in one group and one game. Members only, and only after that member posts that game today. History is paged by `message_id`.
+- **Purpose**: Text messages in one group and one game. Members only, and only after that member posts that game today. A `standings` row is the rankings note posted once when every current member has filed that game on the group's puzzle today. History is paged by `message_id`.
 - **Columns**:
   - message_id (SERIAL PRIMARY KEY)
   - parlor_id (INTEGER NOT NULL)
   - game_id (INTEGER NOT NULL)
-  - user_id (INTEGER NOT NULL)
+  - user_id (INTEGER NOT NULL) — the member whose post completed the board, including on a standings note
   - body (TEXT NOT NULL) — 1 to 2000 characters
+  - kind (TEXT NOT NULL DEFAULT 'chat') — `chat` or `standings`
   - created_at (TIMESTAMPTZ NOT NULL DEFAULT NOW())
 - **Indexes**:
   - parlor_messages_game_idx — (parlor_id, game_id, message_id DESC)
-- **Checks**: `parlor_messages_body_check` requires `char_length(body)` between 1 and 2000
+- **Checks**: `parlor_messages_body_check` requires `char_length(body)` between 1 and 2000. `parlor_messages_kind_check` allows `chat` or `standings`
 - **Foreign Keys**:
   - parlor_id → parlors(parlor_id) ON DELETE CASCADE
   - game_id → games(game_id)
   - user_id → users(user_id) ON DELETE CASCADE
 - **Triggers**: None
-- **Last Modified**: 2026-09-28
+- **Last Modified**: 2026-11-04
 
 ### parlor_reactions
 
@@ -278,22 +336,64 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
 
 ### device_tokens
 
-- **Purpose**: Capacitor push token for the signed-in reader. Register after sign-in. Delete that token on sign-out.
+- **Purpose**: One row per signed-in device. `token` is the APNs device token. `fcm_token` is the Firebase registration token used to send. Register both after sign-in. Delete that APNs token on sign-out.
 - **Columns**:
   - device_token_id (SERIAL PRIMARY KEY)
   - user_id (INTEGER NOT NULL)
-  - token (TEXT NOT NULL UNIQUE)
+  - token (TEXT NOT NULL UNIQUE) — APNs device token
+  - fcm_token (TEXT NOT NULL UNIQUE) — FCM registration token
   - platform (VARCHAR(16) NOT NULL) — `ios`, `android`, or `web`
   - created_at (TIMESTAMPTZ NOT NULL DEFAULT NOW())
   - updated_at (TIMESTAMPTZ NOT NULL DEFAULT NOW())
 - **Indexes**:
-  - device_tokens_token_key — unique token
+  - device_tokens_token_key — unique APNs token
+  - device_tokens_fcm_token_key — unique FCM token
   - device_tokens_user_idx — tokens for one reader
 - **Checks**: `device_tokens_platform_check` allows `ios`, `android`, or `web`
 - **Foreign Keys**:
   - user_id → users(user_id) ON DELETE CASCADE
 - **Triggers**: `device_tokens_set_updated_at` via `set_updated_at()`
-- **Last Modified**: 2026-09-28
+- **Last Modified**: 2026-09-30
+
+### friendships
+
+- **Purpose**: A friend request between two accounts. The global board can be limited to the caller and accepted friends. A pending request in the other direction is accepted. A declined pair can be requested again. Deleting the row cancels a request or ends a friendship.
+- **Columns**:
+  - friendship_id (SERIAL PRIMARY KEY)
+  - requester_id (INTEGER NOT NULL)
+  - addressee_id (INTEGER NOT NULL)
+  - status (VARCHAR(16) NOT NULL DEFAULT 'pending') — `pending`, `accepted`, or `declined`
+  - created_at (TIMESTAMPTZ NOT NULL DEFAULT NOW())
+  - updated_at (TIMESTAMPTZ NOT NULL DEFAULT NOW())
+- **Indexes**:
+  - friendships_pair_uidx — unique (requester_id, addressee_id)
+  - friendships_addressee_idx — incoming requests
+  - friendships_requester_idx — outgoing requests
+- **Checks**:
+  - `friendships_distinct` requires two different accounts
+  - `friendships_status_check` allows `pending`, `accepted`, or `declined`
+- **Foreign Keys**:
+  - requester_id → users(user_id) ON DELETE CASCADE
+  - addressee_id → users(user_id) ON DELETE CASCADE
+- **Triggers**: `friendships_set_updated_at` via `set_updated_at()`
+- **Last Modified**: 2026-11-16
+
+### user_games
+
+- **Purpose**: Games a reader has chosen to play. A missing row stays on, so the catalog stays visible until they turn a game off. Home, the Board filter, the reader’s own stats, and the story use this list.
+- **Columns**:
+  - user_id (INTEGER NOT NULL)
+  - game_id (INTEGER NOT NULL)
+  - enabled (BOOLEAN NOT NULL DEFAULT TRUE)
+- **Indexes**:
+  - user_games_pkey — (user_id, game_id)
+  - user_games_user_idx — a reader’s selection
+- **Checks**: None
+- **Foreign Keys**:
+  - user_id → users(user_id) ON DELETE CASCADE
+  - game_id → games(game_id) ON DELETE CASCADE
+- **Triggers**: None
+- **Last Modified**: 2026-11-16
 
 ### session
 
@@ -339,6 +439,100 @@ Created by `connect-pg-simple` when the pool is healthy (`createTableIfMissing`)
 
 - Created `game_requests`
 - **Last Modified**: 2026-09-27
+
+### 013_device_fcm_token.sql
+
+- Added `fcm_token` on `device_tokens`
+- Removed rows that had only an APNs token
+- **Last Modified**: 2026-09-30
+
+### 019_night_mode.sql
+
+- Added `night_mode` on `users`. On selects the ink edition
+- **Last Modified**: 2026-11-13
+
+### 016_account_notifications.sql
+
+- Added `notifications` on `users`. Off skips every push, including the 8pm reminder
+- **Last Modified**: 2026-11-04
+
+### 015_parlor_message_kind.sql
+
+- Added `kind` on `parlor_messages` (`chat` or `standings`)
+- **Last Modified**: 2026-11-04
+
+### 018_game_active_on.sql
+
+- Added `active_on` on `group_games`. Enabled rows are backfilled from the last update, in the group timezone
+- **Last Modified**: 2026-11-09
+
+### 020_friendships.sql
+
+- Created `friendships` for friend requests
+- **Last Modified**: 2026-11-16
+
+### 024_clear_policy_acceptance.sql
+
+- Set `tos_accepted_version` and `privacy_accepted_version` to null on every account so the next sign-in accepts the current Terms and Privacy Policy
+- **Last Modified**: 2026-11-16
+
+### 023_admin.sql
+
+- Added `is_admin` on `users` and set it for handle `will`
+- Added `seen` on `game_requests`
+- **Last Modified**: 2026-11-16
+
+### 026_size_it_up_epoch.sql
+
+- Recomputed `played_on` for numbered Size It Up scores. #1 is 10 August 2026, so #100 is 17 November 2026. A puzzle number stored as YYYYMMDD keeps its printed day
+- **Last Modified**: 2026-11-17
+
+### 031_noillirk.sql
+
+- Added Noillirk to `games`. It is a daily score board, and higher wins. The score is the printed altitude in metres. Daily #1 is 27 September 2026
+- Added a disabled `group_games` row for each existing group
+- **Last Modified**: 2026-11-19
+
+### 030_hivemind.sql
+
+- Added Hivemind to `games`. It is a daily score board, and higher wins. The share total out of 1,000 is the score. #1 is 27 October 2026
+- Added a disabled `group_games` row for each existing group
+- **Last Modified**: 2026-11-19
+
+### 029_fermi.sql
+
+- Changed `scores.score` from integer to `NUMERIC(12, 2)` so a Fermi multiple such as 27.6 can be stored
+- Added Fermi to `games`. It is a daily score board, and lower wins. #1 is 27 July 2026
+- Added a disabled `group_games` row for each existing group
+- **Last Modified**: 2026-11-18
+
+### 025_farflung_and_eraly.sql
+
+- Added Farflung and Eraly to `games`. Both are daily score boards, and higher wins. Farflung #1 is 5 October 2026. Eraly #1 is 16 October 2026
+- Added a disabled `group_games` row for each existing group
+- **Last Modified**: 2026-11-17
+
+### 022_semantle.sql
+
+- Added Semantle to `games`. Fewer guesses rank higher. A give-up ranks after solves. #1 is 29 January 2022
+- **Last Modified**: 2026-11-16
+
+### 021_user_games.sql
+
+- Created `user_games` for the games a reader is playing
+- **Last Modified**: 2026-11-16
+
+### 017_time_guesser.sql
+
+- Added Time Guesser to `games` and a disabled `group_games` row for each existing group
+- **Last Modified**: 2026-11-09
+
+### 014_redactle.sql
+
+- Added Redactle to `games` and a disabled `group_games` row for each existing group
+- Added `guess_cap` on `games`. Wordle is 6
+- Added `duration_seconds` and `hints` on `scores`, and allowed an unsolved row to keep its guess count
+- **Last Modified**: 2026-11-03
 
 ### 012_parlor_games.sql
 

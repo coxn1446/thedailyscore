@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import AuthPageLayout from '../components/Auth/AuthPageLayout';
 import LoginForm from '../components/Auth/LoginForm';
+import { consumeAccountDeleted } from '../helpers/accountDeleted';
 import { loginWithPassword } from '../helpers/authHelpers';
 import { needsHandle } from '../helpers/identity';
 import { setUser } from '../store/auth.reducer';
@@ -12,8 +13,12 @@ import { safeInternalPath } from '../utils/internalPath';
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [accountDeleted] = useState(
+    () => location.state?.accountDeleted === true || consumeAccountDeleted()
+  );
 
   const handleSubmit = async ({ identifier, password }) => {
     setIsSubmitting(true);
@@ -34,6 +39,9 @@ const Login = () => {
 
   return (
     <AuthPageLayout title="Sign in">
+      {accountDeleted ? (
+        <p className="mb-space-md font-sans text-body-md text-primary">Account deleted.</p>
+      ) : null}
       <LoginForm onSubmit={handleSubmit} isSubmitting={isSubmitting} />
     </AuthPageLayout>
   );

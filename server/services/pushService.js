@@ -3,6 +3,7 @@ const scoreQueries = require('../queries/scoreQueries');
 const pushQueries = require('../queries/pushQueries');
 const deviceQueries = require('../queries/deviceQueries');
 const { deliver } = require('./pushDelivery');
+const { wordleWeekValues } = require('./scoreService');
 const { hasActiveSocket, joinSockets } = require('../socket');
 
 const isFlag = (value) => value === true || value === 't';
@@ -67,22 +68,6 @@ const bestScores = (rows, direction) => {
   return [...byUser.values()];
 };
 
-const averages = (rows, minimum) => {
-  const byUser = new Map();
-  for (const row of rows) {
-    if (!isFlag(row.solved) && row.solved !== true) continue;
-    if (row.guesses == null || Number.isNaN(Number(row.guesses))) continue;
-    const userId = Number(row.user_id);
-    const current = byUser.get(userId) || { user_id: userId, sum: 0, count: 0 };
-    current.sum += Number(row.guesses);
-    current.count += 1;
-    byUser.set(userId, current);
-  }
-  return [...byUser.values()]
-    .filter((item) => item.count >= minimum)
-    .map((item) => ({ user_id: item.user_id, value: item.sum / item.count }));
-};
-
 const tookCrown = (rows, { groupId, userId, scoreId, slug }) => {
   const gameRows = rows.filter(
     (row) => Number(row.group_id) === Number(groupId) && row.slug === slug
@@ -91,9 +76,8 @@ const tookCrown = (rows, { groupId, userId, scoreId, slug }) => {
   if (!posted) return false;
   const before = gameRows.filter((row) => Number(row.score_id) !== Number(scoreId));
   if (posted.rank_basis === 'guesses') {
-    const minimum = Number(posted.min_entries) > 0 ? Number(posted.min_entries) : 1;
-    const afterRank = rankOfUser(averages(gameRows.filter(inWeek), minimum), 'lower', userId);
-    const beforeRank = rankOfUser(averages(before.filter(inWeek), minimum), 'lower', userId);
+    const afterRank = rankOfUser(wordleWeekValues(gameRows.filter(inWeek)), 'lower', userId);
+    const beforeRank = rankOfUser(wordleWeekValues(before.filter(inWeek)), 'lower', userId);
     return afterRank === 1 && beforeRank !== 1;
   }
   const direction = posted.sort_direction === 'lower' ? 'lower' : 'higher';
@@ -103,18 +87,35 @@ const tookCrown = (rows, { groupId, userId, scoreId, slug }) => {
   return afterRank === 1 && beforeRank !== 1;
 };
 
+const trace = (step, detail) => {
+  console.log('[push]', step, detail);
+};
+
 const sendTo = async (userIds, message) => {
+  const type = message?.data?.type || 'push';
   const ids = [...new Set(userIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))];
-  if (!ids.length) return { sent: 0, users: 0 };
+  if (!ids.length) {
+    trace('stop', { type, reason: 'no recipients' });
+    return { sent: 0, users: 0 };
+  }
   const listed = await query(pushQueries.listTokensForUsers, [ids]);
-  const tokens = listed.rows.map((row) => row.token).filter(Boolean);
-  const users = new Set(listed.rows.map((row) => Number(row.user_id))).size;
-  if (!tokens.length) return { sent: 0, users: 0 };
+  const withToken = new Set(
+    listed.rows.filter((row) => row.fcm_token).map((row) => Number(row.user_id))
+  );
+  const tokens = listed.rows.map((row) => row.fcm_token).filter(Boolean);
+  const missing = ids.filter((id) => !withToken.has(id));
+  trace('tokens', { type, recipients: ids, missing, tokenCount: tokens.length });
+  if (!tokens.length) {
+    trace('stop', { type, reason: 'no fcm token for recipients' });
+    return { sent: 0, users: 0 };
+  }
   const result = await deliver(tokens, message);
   if (result.stale?.length) {
+    trace('stale tokens removed', { type, count: result.stale.length });
     await query(deviceQueries.deleteTokens, [result.stale]).catch(() => {});
   }
-  return { sent: result.sent || 0, users };
+  trace('finished', { type, sent: result.sent || 0, users: withToken.size });
+  return { sent: result.sent || 0, users: withToken.size };
 };
 
 const notifyCrown = async ({ userId, scoreId, groups }) => {
@@ -183,6 +184,11 @@ const notifyScore = async ({ userId, gameName, groups }) => {
       (row) => Number(row.user_id) !== Number(userId) && isFlag(row.alert_scores)
     );
     const groupName = group.name || members.rows[0]?.group_name || 'Group';
+    trace('score', {
+      groupId: group.group_id,
+      posterUserId: userId,
+      recipients: recipients.map((row) => Number(row.user_id)),
+    });
     const result = await sendTo(
       recipients.map((row) => row.user_id),
       {
@@ -199,27 +205,62 @@ const notifyScore = async ({ userId, gameName, groups }) => {
   return { sent };
 };
 
-const notifyParlor = async ({ groupId, authorUserId, authorName, gameId }) => {
-  const members = await query(pushQueries.listMemberAlerts, [groupId]);
-  let postedIds = null;
-  if (gameId) {
-    const parlorQueries = require('../queries/parlorQueries');
-    const ids = members.rows.map((row) => Number(row.user_id));
-    const posted = ids.length ? await query(parlorQueries.membersPostedToday, [gameId, ids]) : { rows: [] };
-    postedIds = new Set(posted.rows.map((row) => Number(row.user_id)));
+const notifyReaction = async ({ groupId, actorUserId, actorName, authorUserId }) => {
+  trace('reaction', { groupId, actorUserId, authorUserId });
+  if (!authorUserId || Number(authorUserId) === Number(actorUserId)) {
+    trace('stop', { type: 'reaction', reason: 'author is the actor' });
+    return { sent: 0 };
   }
+  if (hasActiveSocket(authorUserId)) {
+    trace('stop', { type: 'reaction', reason: 'author has an open socket', authorUserId });
+    return { sent: 0 };
+  }
+  const members = await query(pushQueries.listMemberAlerts, [groupId]);
+  const author = members.rows.find((row) => Number(row.user_id) === Number(authorUserId));
+  if (!author || !isFlag(author.alert_messages)) {
+    trace('stop', { type: 'reaction', reason: author ? 'alert_messages off' : 'author is not a member' });
+    return { sent: 0 };
+  }
+  const name = typeof actorName === 'string' && actorName.trim() ? actorName.trim() : 'A member';
+  return sendTo(
+    [authorUserId],
+    {
+      title: author.group_name || 'Group',
+      body: `${name} reacted to your message.`,
+      data: {
+        type: 'reaction',
+        group_id: String(groupId),
+      },
+    }
+  );
+};
+
+const notifyParlor = async ({ groupId, authorUserId, authorName, body }) => {
+  const members = await query(pushQueries.listMemberAlerts, [groupId]);
+  const skipped = members.rows.filter((row) => {
+    const id = Number(row.user_id);
+    return id === Number(authorUserId) || !isFlag(row.alert_messages);
+  }).map((row) => ({
+    userId: Number(row.user_id),
+    reason: Number(row.user_id) === Number(authorUserId) ? 'author' : 'alert_messages off',
+  }));
   const recipients = members.rows.filter((row) => {
     if (Number(row.user_id) === Number(authorUserId)) return false;
-    if (!isFlag(row.alert_messages)) return false;
-    if (postedIds && !postedIds.has(Number(row.user_id))) return false;
-    return !hasActiveSocket(row.user_id);
+    return isFlag(row.alert_messages);
+  });
+  trace('parlor', {
+    groupId,
+    authorUserId,
+    authorName,
+    recipients: recipients.map((row) => Number(row.user_id)),
+    skipped,
   });
   const groupName = members.rows[0]?.group_name || 'Group';
   return sendTo(
     recipients.map((row) => row.user_id),
     {
       title: groupName,
-      body: `${authorName} messaged ${groupName}.`,
+      body: body || `${authorName} messaged ${groupName}.`,
       data: {
         type: 'parlor',
         group_id: String(groupId),
@@ -243,12 +284,59 @@ const sendReminders = async (now = new Date()) => {
   return { reminded: result.users };
 };
 
+const notifyLike = async ({ authorId, scoreId, actor }) => {
+  if (!authorId || Number(authorId) === Number(actor?.user_id)) return { sent: 0 };
+  return sendTo(
+    [authorId],
+    {
+      title: 'The Daily Score',
+      body: `${labelOf(actor)} liked your post.`,
+      data: { type: 'like', score_id: String(scoreId) },
+    }
+  );
+};
+
+const notifyComment = async ({ authorId, scoreId, actor }) => {
+  if (!authorId || Number(authorId) === Number(actor?.user_id)) return { sent: 0 };
+  return sendTo(
+    [authorId],
+    {
+      title: 'The Daily Score',
+      body: `${labelOf(actor)} left a comment on your post.`,
+      data: { type: 'comment', score_id: String(scoreId) },
+    }
+  );
+};
+
+const notifyFriendRequest = async ({ addresseeId, actor }) => sendTo(
+  [addresseeId],
+  {
+    title: 'The Daily Score',
+    body: `${labelOf(actor)} sent a friend request.`,
+    data: { type: 'friend' },
+  }
+);
+
+const notifyFriendAccept = async ({ requesterId, actor }) => sendTo(
+  [requesterId],
+  {
+    title: 'The Daily Score',
+    body: `${labelOf(actor)} accepted your friend request.`,
+    data: { type: 'friend' },
+  }
+);
+
 module.exports = {
   tookCrown,
   localHour,
   notifyCrown,
   notifyScore,
   notifyNewMember,
+  notifyReaction,
   notifyParlor,
+  notifyLike,
+  notifyComment,
+  notifyFriendRequest,
+  notifyFriendAccept,
   sendReminders,
 };

@@ -7,10 +7,16 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-const { getLanIPv4 } = require('./scripts/capacitor-env.js');
+const { getDefaultDevServerUrl } = require('./scripts/capacitor-env.js');
 const { capacitorSkipNativeHmrReload } = require('./scripts/vite-skip-native-hmr-reload.js');
 
-const lanIp = getLanIPv4();
+const devHost = (() => {
+  try {
+    return new URL(getDefaultDevServerUrl()).hostname;
+  } catch {
+    return '';
+  }
+})();
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), capacitorSkipNativeHmrReload()],
@@ -23,7 +29,7 @@ export default defineConfig({
     host: true,
     port: 3000,
     strictPort: true,
-    hmr: lanIp ? { host: lanIp } : undefined,
+    hmr: devHost && devHost !== 'localhost' ? { host: devHost } : undefined,
     proxy: {
       '/api': {
         target: 'http://localhost:8080',

@@ -61,9 +61,9 @@ const members = [
 ];
 
 const tokens = [
-  { user_id: 4, token: 'ada-token' },
-  { user_id: 8, token: 'bea-token' },
-  { user_id: 9, token: 'cy-token' },
+  { user_id: 4, fcm_token: 'ada-token' },
+  { user_id: 8, fcm_token: 'bea-token' },
+  { user_id: 9, fcm_token: 'cy-token' },
 ];
 
 const install = (weekRows, alertRows = members) => {
@@ -115,27 +115,32 @@ describe('pushService', () => {
     expect(deliver).not.toHaveBeenCalled();
   });
 
-  test('crowns a weekly guess average once min_entries is met, not a combined board', async () => {
-    const guesses = [4, 3, 2, 5].map((guessesCount, index) => row({
-      ...wordle,
-      score_id: index + 1,
-      user_id: 4,
-      score: null,
-      guesses: guessesCount,
-      logged_today: index === 3,
-    }));
+  test('crowns a Wordle that takes the weighted weekly lead, not a one-off over a steady week', async () => {
     install([
-      ...guesses,
+      row({ ...wordle, score_id: 1, user_id: 4, score: null, guesses: 4, logged_today: true }),
       row({ score_id: 90, user_id: 8, score: 9999, display_name: 'Bea', handle: 'bea' }),
     ]);
-    await pushService.notifyCrown({ userId: 4, scoreId: 4, groups: [{ group_id: 10 }] });
+    await pushService.notifyCrown({ userId: 4, scoreId: 1, groups: [{ group_id: 10 }] });
     expect(deliver).toHaveBeenCalledTimes(1);
     expect(deliver.mock.calls[0][1].body).toBe('Ada took 1st in Wordle.');
     expect(deliver.mock.calls[0][1].body).not.toContain('CRANE');
 
     deliver.mockClear();
-    install(guesses.slice(0, 3));
-    await pushService.notifyCrown({ userId: 4, scoreId: 3, groups: [{ group_id: 10 }] });
+    const steady = [3, 3, 3, 3].map((guesses, index) => row({
+      ...wordle,
+      score_id: index + 1,
+      user_id: 8,
+      score: null,
+      guesses,
+      display_name: 'Bea',
+      handle: 'bea',
+      logged_today: false,
+    }));
+    install([
+      ...steady,
+      row({ ...wordle, score_id: 20, user_id: 4, score: null, guesses: 2, logged_today: true }),
+    ]);
+    await pushService.notifyCrown({ userId: 4, scoreId: 20, groups: [{ group_id: 10 }] });
     expect(deliver).not.toHaveBeenCalled();
   });
 
@@ -151,18 +156,56 @@ describe('pushService', () => {
     expect(deliver).not.toHaveBeenCalled();
   });
 
-  test('parlor push goes to members with no socket and skips the author', async () => {
-    hasActiveSocket.mockImplementation((userId) => Number(userId) === 9);
+  test('parlor push goes to other members with message alerts on', async () => {
+    hasActiveSocket.mockReturnValue(true);
     install([]);
     await pushService.notifyParlor({
       groupId: 10,
       authorUserId: 4,
       authorName: 'Ada',
-      body: 'See you at the desk',
+      gameId: 2,
     });
     expect(deliver).toHaveBeenCalledTimes(1);
     expect(deliver.mock.calls[0][0]).toEqual(['bea-token']);
     expect(deliver.mock.calls[0][1].body).toBe('Ada messaged Sunday desk.');
+  });
+
+  test('reaction push goes to the author when messages alerts are on and they have no socket', async () => {
+    hasActiveSocket.mockImplementation((userId) => Number(userId) === 8);
+    install([]);
+    await pushService.notifyReaction({
+      groupId: 10,
+      actorUserId: 4,
+      actorName: 'Ada',
+      authorUserId: 8,
+    });
+    expect(deliver).not.toHaveBeenCalled();
+
+    hasActiveSocket.mockReturnValue(false);
+    await pushService.notifyReaction({
+      groupId: 10,
+      actorUserId: 4,
+      actorName: 'Ada',
+      authorUserId: 8,
+    });
+    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(deliver.mock.calls[0][0]).toEqual(['bea-token']);
+    expect(deliver.mock.calls[0][1].body).toBe('Ada reacted to your message.');
+
+    deliver.mockClear();
+    await pushService.notifyReaction({
+      groupId: 10,
+      actorUserId: 4,
+      actorName: 'Ada',
+      authorUserId: 4,
+    });
+    await pushService.notifyReaction({
+      groupId: 10,
+      actorUserId: 8,
+      actorName: 'Bea',
+      authorUserId: 9,
+    });
+    expect(deliver).not.toHaveBeenCalled();
   });
 
   test('score push uses the group score toggle and skips the poster', async () => {
@@ -202,5 +245,50 @@ describe('pushService', () => {
     expect(deliver).toHaveBeenCalledTimes(1);
     expect(deliver.mock.calls[0][0]).toEqual(['ada-token']);
     expect(deliver.mock.calls[0][1].body).toBe("File today's score.");
+  });
+
+  test('notifies the author of a like and a comment, and skips a self action', async () => {
+    query.mockImplementation(async (sql, params) => {
+      if (sql === pushQueries.listTokensForUsers) {
+        return { rows: tokens.filter((token) => params[0].map(Number).includes(token.user_id)) };
+      }
+      throw new Error('unexpected sql');
+    });
+    await pushService.notifyLike({
+      authorId: 4,
+      scoreId: 9,
+      actor: { user_id: 8, display_name: 'Bea', handle: 'bea' },
+    });
+    expect(deliver).toHaveBeenCalledWith(
+      ['ada-token'],
+      expect.objectContaining({
+        body: 'Bea liked your post.',
+        data: { type: 'like', score_id: '9' },
+      })
+    );
+    await pushService.notifyComment({
+      authorId: 8,
+      scoreId: 9,
+      actor: { user_id: 4, display_name: '', handle: 'ada' },
+    });
+    expect(deliver.mock.calls[1][1].body).toBe('ada left a comment on your post.');
+    expect(deliver.mock.calls[1][1].data).toEqual({ type: 'comment', score_id: '9' });
+    deliver.mockClear();
+    await pushService.notifyLike({ authorId: 4, scoreId: 9, actor: { user_id: 4, display_name: 'Ada' } });
+    await pushService.notifyComment({ authorId: 4, scoreId: 9, actor: { user_id: 4, display_name: 'Ada' } });
+    expect(deliver).not.toHaveBeenCalled();
+  });
+
+  test('names the handle on a friend request and an accept', async () => {
+    query.mockImplementation(async (sql, params) => {
+      if (sql === pushQueries.listTokensForUsers) {
+        return { rows: tokens.filter((token) => params[0].map(Number).includes(token.user_id)) };
+      }
+      throw new Error('unexpected sql');
+    });
+    await pushService.notifyFriendRequest({ addresseeId: 8, actor: { display_name: 'Ada', handle: 'ada' } });
+    expect(deliver.mock.calls[0][1].body).toBe('Ada sent a friend request.');
+    await pushService.notifyFriendAccept({ requesterId: 4, actor: { display_name: 'Bea', handle: 'bea' } });
+    expect(deliver.mock.calls[1][1].body).toBe('Bea accepted your friend request.');
   });
 });

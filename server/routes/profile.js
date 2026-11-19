@@ -30,6 +30,33 @@ module.exports = () => {
     }
   });
 
+  router.get('/games', requireAuth, async (req, res, next) => {
+    try {
+      const payload = await profileService.readGames(req.user.user_id);
+      return res.json(payload);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  router.put('/games', requireAuth, async (req, res, next) => {
+    try {
+      const payload = await profileService.saveGames(req.user.user_id, req.body?.games);
+      return res.json(payload);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  router.get('/player/:handle', requireAuth, async (req, res, next) => {
+    try {
+      const payload = await profileService.readPlayer(req.user.user_id, req.params.handle);
+      return res.json(payload);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
   router.get('/', requireAuth, async (req, res, next) => {
     try {
       const period = req.query.period === 'week' || req.query.period === 'month' ? req.query.period : 'all';
@@ -43,13 +70,14 @@ module.exports = () => {
   router.patch('/', requireAuth, async (req, res, next) => {
     try {
       const body = req.body || {};
-      const alertsOnly = body.display_name == null
-        && body.handle == null
-        && body.email == null
-        && (body.remind_daily != null || body.alert_crown != null || body.alert_new_member != null);
-      const user = alertsOnly
-        ? await profileService.updateAlerts(req.user.user_id, body)
-        : await profileService.update(req.user.user_id, body);
+      const identity = body.display_name != null || body.handle != null || body.email != null;
+      const user = !identity && body.notifications != null
+        ? await profileService.updateNotifications(req.user.user_id, body)
+        : !identity && body.night_mode != null
+          ? await profileService.updateNightMode(req.user.user_id, body)
+          : !identity && (body.remind_daily != null || body.alert_crown != null || body.alert_new_member != null)
+            ? await profileService.updateAlerts(req.user.user_id, body)
+            : await profileService.update(req.user.user_id, body);
       return res.json({ user });
     } catch (err) {
       return next(err);

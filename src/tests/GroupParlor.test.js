@@ -46,7 +46,8 @@ describe('GroupParlor', () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
     });
     expect(composer.className).toContain('fixed');
-    expect(composer.style.bottom).not.toBe('320px');
+    expect(composer.style.top).toBe('auto');
+    expect(composer.style.bottom).toBe('320px');
     await act(async () => {
       field.blur();
     });
@@ -73,6 +74,7 @@ describe('GroupParlor', () => {
     await user.click(screen.getByRole('button', { name: 'Send' }));
     expect(await screen.findByText('Good morning')).toBeInTheDocument();
     expect(postParlorMessage).toHaveBeenCalledWith(10, 'krillion', 'Good morning');
+    expect(screen.getByLabelText('Message')).toHaveFocus();
   });
 
   test('appends a live message from the other member', async () => {
@@ -89,6 +91,7 @@ describe('GroupParlor', () => {
         group_id: 10,
         user_id: 4,
         display_name: 'Ada',
+        portrait_url: '/uploads/ada.png',
         body: 'First',
         created_at: '2026-09-28T14:00:00.000Z',
       }],
@@ -98,6 +101,7 @@ describe('GroupParlor', () => {
     render(<GroupParlor groupId={10} gameSlug="krillion" />);
     const body = await screen.findByText('First');
     expect(body.parentElement).toContainElement(screen.getByRole('button', { name: 'Add reaction' }));
+    expect(document.querySelector('img[src="/uploads/ada.png"]')).toBeInTheDocument();
     await act(async () => {
       handlers['parlor:message']({
         message_id: 2,
@@ -112,6 +116,7 @@ describe('GroupParlor', () => {
     await waitFor(() => {
       expect(screen.getByText('Bea')).toBeInTheDocument();
     });
+    expect(screen.getByText('B')).toBeInTheDocument();
   });
 
   test('links Home when the game has not been posted today', async () => {
@@ -126,5 +131,33 @@ describe('GroupParlor', () => {
     expect(await screen.findByText(/haven't played this game yet today, submit your score/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'here' })).toHaveAttribute('href', '/');
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+  });
+
+  test('stamps each day and renders rankings as a notice', async () => {
+    fetchParlor.mockResolvedValue({
+      messages: [
+        {
+          message_id: 1,
+          display_name: 'Ada',
+          body: 'Morning',
+          kind: 'chat',
+          created_at: '2026-09-15T12:00:00.000Z',
+        },
+        {
+          message_id: 2,
+          display_name: 'Ada',
+          body: 'Rankings\n1. Ada — 10',
+          kind: 'standings',
+          created_at: '2026-10-15T12:00:00.000Z',
+        },
+      ],
+      before: null,
+    });
+
+    render(<GroupParlor groupId={10} gameSlug="krillion" />);
+    expect(await screen.findByText(/Sep/)).toBeInTheDocument();
+    expect(screen.getByText(/Oct/)).toBeInTheDocument();
+    expect(screen.getByText(/Rankings/)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Add reaction' })).toHaveLength(1);
   });
 });

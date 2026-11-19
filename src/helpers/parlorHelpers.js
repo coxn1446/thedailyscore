@@ -1,17 +1,4 @@
-const readJson = async (res) => {
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Request failed');
-  return data;
-};
-
-const request = async (url, options = {}) => {
-  const res = await fetch(url, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options,
-  });
-  return readJson(res);
-};
+import { apiJson as request } from './sessionClient';
 
 export const fetchConversations = () => request('/api/groups/conversations');
 

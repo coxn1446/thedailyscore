@@ -4,6 +4,8 @@ jest.mock('../../server/services/scoreService', () => ({
   personalBests: jest.fn(),
   gazette: jest.fn(),
   loggedToday: jest.fn(),
+  todayScores: jest.fn(),
+  recap: jest.fn(),
   archive: jest.fn(),
   removeScore: jest.fn(),
   updateShares: jest.fn(),
@@ -71,7 +73,7 @@ describe('score routes', () => {
       body: { paste: 'Krillion #74 🦐\n355' },
     });
     expect(posted.status).toBe(200);
-    expect(scoreService.confirm).toHaveBeenCalledWith(4, 'Krillion #74 🦐\n355', expect.any(Date), undefined, 'UTC');
+    expect(scoreService.confirm).toHaveBeenCalledWith(4, 'Krillion #74 🦐\n355', expect.any(Date), undefined, 'UTC', undefined);
   });
 
   test('returns the caller’s best marks', async () => {
@@ -97,6 +99,22 @@ describe('score routes', () => {
     expect(scoreService.loggedToday).toHaveBeenCalledWith(4);
 
     const guest = await invoke('GET', '/gazette');
+    expect(guest.status).toBe(401);
+  });
+
+  test('returns today’s scores for the caller', async () => {
+    scoreService.todayScores.mockResolvedValue({
+      on: '2026-09-30',
+      scores: [{ slug: 'wordle', name: 'Wordle', rank_basis: 'guesses', guesses: null, solved: false, score: null }],
+    });
+    const today = await invoke('GET', '/today', {
+      authenticated: true,
+      user: { user_id: 4, suspended: false, timezone: 'America/New_York' },
+    });
+    expect(today.status).toBe(200);
+    expect(today.body.scores).toHaveLength(1);
+    expect(scoreService.todayScores).toHaveBeenCalledWith(4, 'America/New_York');
+    const guest = await invoke('GET', '/today');
     expect(guest.status).toBe(401);
   });
 

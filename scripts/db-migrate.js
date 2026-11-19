@@ -28,12 +28,16 @@ function resolveSearchPath() {
   return schema;
 }
 
-async function main() {
+const MIGRATION_LOCK = 824016;
+
+async function runMigrations() {
   const schema = resolveSearchPath();
   const pool = new Pool(getDbConfig());
-  const client = await pool.connect();
+  let client;
 
   try {
+    client = await pool.connect();
+    await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK]);
     await client.query(`SET search_path TO ${schema}, public`);
 
     await client.query(`
@@ -87,13 +91,21 @@ async function main() {
         ? `Up to date (${schema}).`
         : `Applied ${ran} migration(s) on ${schema}.`
     );
+    return ran;
   } finally {
-    client.release();
+    if (client) {
+      await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK]).catch(() => {});
+      client.release();
+    }
     await pool.end();
   }
 }
 
-main().catch((err) => {
-  console.error(err.message || err);
-  process.exit(1);
-});
+if (require.main === module) {
+  runMigrations().catch((err) => {
+    console.error(err.message || err);
+    process.exit(1);
+  });
+}
+
+module.exports = { runMigrations };

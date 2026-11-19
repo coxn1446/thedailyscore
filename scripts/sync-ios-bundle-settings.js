@@ -80,6 +80,32 @@ function stripLocalNetworkPrivacy(plistContent) {
     .replace(/\t*<key>NSBonjourServices<\/key>\s*\n\s*<array>[\s\S]*?<\/array>\s*\n/g, '');
 }
 
+const INSTAGRAM_SCHEME_BLOCK = `	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>instagram-stories</string>
+	</array>`;
+
+function ensureInstagramStoriesScheme(plistContent) {
+  if (plistContent.includes('<string>instagram-stories</string>')) return plistContent;
+  if (plistContent.includes('<key>LSApplicationQueriesSchemes</key>')) return plistContent;
+  return plistContent.replace('</dict>\n</plist>', `${INSTAGRAM_SCHEME_BLOCK}\n</dict>\n</plist>`);
+}
+
+function ensureFacebookAppId(plistContent, appId) {
+  const id = String(appId || '').trim();
+  if (!/^[0-9]+$/.test(id)) return plistContent;
+  if (plistContent.includes('<key>FacebookAppID</key>')) {
+    return plistContent.replace(
+      /(<key>FacebookAppID<\/key>\s*\n\s*<string>)[^<]*(<\/string>)/,
+      `$1${id}$2`
+    );
+  }
+  return plistContent.replace(
+    '</dict>\n</plist>',
+    `\t<key>FacebookAppID</key>\n\t<string>${id}</string>\n</dict>\n</plist>`
+  );
+}
+
 function stripPhotoLibraryUsage(plistContent) {
   return plistContent
     .replace(/\t*<key>NSPhotoLibraryUsageDescription<\/key>\s*\n\s*<string>[^<]*<\/string>\s*\n/g, '')
@@ -109,6 +135,8 @@ async function syncIosBundleSettings() {
   const currentDisplayName = readCfBundleDisplayName(plist);
   let nextPlist = replaceCfBundleDisplayName(plist, appName);
   nextPlist = ensureDailyScoreUrlScheme(nextPlist);
+  nextPlist = ensureInstagramStoriesScheme(nextPlist);
+  nextPlist = ensureFacebookAppId(nextPlist, process.env.FACEBOOK_APP_ID);
   nextPlist = ensureAppTransportSecurity(nextPlist);
   nextPlist = stripLocalNetworkPrivacy(nextPlist);
   nextPlist = stripPhotoLibraryUsage(nextPlist);
@@ -136,6 +164,8 @@ module.exports = {
   replaceCfBundleDisplayName,
   readCfBundleDisplayName,
   ensureDailyScoreUrlScheme,
+  ensureInstagramStoriesScheme,
+  ensureFacebookAppId,
   ensureAppTransportSecurity,
   stripLocalNetworkPrivacy,
   stripPhotoLibraryUsage,

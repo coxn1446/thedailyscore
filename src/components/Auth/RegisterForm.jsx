@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import OAuthButtons from './OAuthButtons';
-import { fieldClass, labelClass, primaryButtonClass } from './AuthPageLayout';
+import { checkboxClass, fieldClass, labelClass, primaryButtonClass } from './AuthPageLayout';
 
 const RegisterForm = ({ onSubmit, isSubmitting }) => {
   const [displayName, setDisplayName] = useState('');
@@ -17,7 +17,6 @@ const RegisterForm = ({ onSubmit, isSubmitting }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-space-md">
-      <OAuthButtons />
       <div>
         <label htmlFor="display-name" className={labelClass}>
           Display name
@@ -81,7 +80,7 @@ const RegisterForm = ({ onSubmit, isSubmitting }) => {
           type="checkbox"
           checked={acceptedPolicies}
           onChange={(event) => setAcceptedPolicies(event.target.checked)}
-          className="mt-1 h-4 w-4 border border-primary"
+          className={`mt-1 ${checkboxClass}`}
           required
         />
         <span>
@@ -99,6 +98,7 @@ const RegisterForm = ({ onSubmit, isSubmitting }) => {
       <button type="submit" className={primaryButtonClass} disabled={isSubmitting}>
         Create account
       </button>
+      <OAuthButtons />
       <p className="text-center font-sans text-body-md text-primary">
         Already registered?{' '}
         <Link to="/login" className="underline decoration-primary underline-offset-2 hover:text-secondary">

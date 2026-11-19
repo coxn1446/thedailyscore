@@ -1,5 +1,5 @@
-const CURRENT_TOS_VERSION = '2026-09-27';
-const CURRENT_PRIVACY_VERSION = '2026-09-27';
+const CURRENT_TOS_VERSION = '2026-11-16';
+const CURRENT_PRIVACY_VERSION = '2026-11-16';
 
 const presentUser = (row) => {
   if (!row) return null;
@@ -19,14 +19,24 @@ const presentUser = (row) => {
     remind_daily: user.remind_daily !== false && user.remind_daily !== 'f',
     alert_crown: user.alert_crown !== false && user.alert_crown !== 'f',
     alert_new_member: user.alert_new_member === true || user.alert_new_member === 't',
+    notifications: user.notifications !== false && user.notifications !== 'f',
+    night_mode: user.night_mode === true || user.night_mode === 't',
+    is_admin: user.is_admin === true || user.is_admin === 't',
   };
 };
 
-const postAuthPath = (user) => (user && !user.needs_handle && user.handle ? '/' : '/register');
+const needsPolicyAcceptance = (user) =>
+  Boolean(user && (user.needs_tos_acceptance || user.needs_privacy_acceptance));
+
+const postAuthPath = (user) => {
+  if (!user || user.needs_handle || !user.handle) return '/register';
+  return '/';
+};
 
 module.exports = {
   CURRENT_TOS_VERSION,
   CURRENT_PRIVACY_VERSION,
   presentUser,
+  needsPolicyAcceptance,
   postAuthPath,
 };

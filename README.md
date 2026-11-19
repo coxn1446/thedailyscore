@@ -21,7 +21,6 @@ Guests opening `/` land on sign-in. A signed-in reader sees Home, Groups, and Pr
 - `npm test`
 - `npm run dev`
 - `npm run db:migrate`
-- `npm run s` — sync the iOS project with `co.thedailyscore.thedailyscore.dev`
+- `npm run s` — sync the iOS project with `site.thedailyscore.dev`
 
-Shared Cloud SQL (`nash-data` / `shared-pg`, database `thedailyscore`, schemas `qa` and `prod`) is documented in `documentation/ARCHITECTURE.md` and is not created by this shell.
-# thedailyscore
+QA and production run on Cloud Run in `thedailyscore-528401`. Postgres is the shared instance in `nash-data` (`shared-pg`, database `thedailyscore`, schemas `qa` and `prod`). See `documentation/DEPLOYMENT.md`.

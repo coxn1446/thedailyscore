@@ -11,6 +11,9 @@ const USER_FIELDS = `
   remind_daily,
   alert_crown,
   alert_new_member,
+  notifications,
+  night_mode,
+  is_admin,
   suspended,
   tos_accepted_version,
   privacy_accepted_version,
@@ -97,6 +100,16 @@ const linkAppleId = `
   SET
     apple_id = $2,
     email_verified = TRUE,
+    updated_at = NOW()
+  WHERE user_id = $1
+  RETURNING ${USER_FIELDS}
+`;
+
+const acceptPolicies = `
+  UPDATE users
+  SET
+    tos_accepted_version = $2,
+    privacy_accepted_version = $3,
     updated_at = NOW()
   WHERE user_id = $1
   RETURNING ${USER_FIELDS}
@@ -191,6 +204,7 @@ module.exports = {
   insertOAuthUser,
   linkGoogleId,
   linkAppleId,
+  acceptPolicies,
   setHandle,
   setPassword,
   setVerifyToken,

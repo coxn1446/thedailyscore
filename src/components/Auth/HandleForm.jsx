@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fieldClass, labelClass, primaryButtonClass } from './AuthPageLayout';
+import { checkboxClass, fieldClass, labelClass, primaryButtonClass } from './AuthPageLayout';
 
 const HandleForm = ({ displayName, onSubmit, isSubmitting }) => {
   const [name, setName] = useState(displayName || '');
@@ -45,7 +45,7 @@ const HandleForm = ({ displayName, onSubmit, isSubmitting }) => {
           type="checkbox"
           checked={acceptedPolicies}
           onChange={(event) => setAcceptedPolicies(event.target.checked)}
-          className="mt-1 h-4 w-4 border border-primary"
+          className={`mt-1 ${checkboxClass}`}
           required
         />
         <span>

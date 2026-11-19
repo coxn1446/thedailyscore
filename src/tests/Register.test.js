@@ -17,11 +17,16 @@ jest.mock('react-hot-toast', () => ({
 jest.mock('../helpers/authHelpers', () => ({
   registerWithPassword: jest.fn(),
   claimHandle: jest.fn(),
+  googleLoginUrl: () => '/api/auth/google',
+  appleLoginUrl: () => '/api/auth/apple',
+  openSystemBrowserForOAuthStart: jest.fn(),
 }));
 
 jest.mock('../helpers/oauthConfig', () => ({
-  fetchAuthConfig: jest.fn().mockResolvedValue({ googleClientId: null, appleClientId: null }),
+  fetchAuthConfig: jest.fn(),
 }));
+
+const { fetchAuthConfig } = require('../helpers/oauthConfig');
 
 const renderRegister = () => {
   const store = configureStore({
@@ -37,9 +42,13 @@ const renderRegister = () => {
   );
 };
 
+const follows = (earlier, later) =>
+  Boolean(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING);
+
 describe('Register', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    fetchAuthConfig.mockResolvedValue({ googleClientId: null, appleClientId: null });
   });
 
   test('collects display name, handle, email, and password', async () => {
@@ -49,6 +58,21 @@ describe('Register', () => {
     expect(screen.getByLabelText('Email')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
     expect(screen.getByTestId('auth-panel').className).not.toMatch(/rounded/);
+    expect(screen.queryByText('The Daily Score')).not.toBeInTheDocument();
+    expect(screen.queryByText('The Social Broadsheet of Daily Games')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Support' })).toHaveAttribute('href', '/support');
+  });
+
+  test('places third-party sign-in under create account', async () => {
+    fetchAuthConfig.mockResolvedValue({ googleClientId: 'google', appleClientId: 'apple' });
+    renderRegister();
+    const create = await screen.findByRole('button', { name: 'Create account' });
+    const google = await screen.findByRole('link', { name: 'Continue with Google' });
+    const apple = screen.getByRole('link', { name: 'Continue with Apple' });
+    const already = screen.getByText(/Already registered/i);
+    expect(follows(create, google)).toBe(true);
+    expect(follows(apple, already)).toBe(true);
+    expect(follows(google, already)).toBe(true);
   });
 
   test('shows the duplicate-handle error', async () => {

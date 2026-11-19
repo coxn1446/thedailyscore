@@ -19,6 +19,8 @@ jest.mock('../helpers/groupHelpers', () => ({
   renameGroup: jest.fn(),
   updateGroupAlerts: jest.fn(),
   inviteUrl: (token) => `http://localhost/join/${token}`,
+  inviteShareText: (name, token) =>
+    `Please join my group ${name} on The Daily Score\nhttp://localhost/join/${token}`,
 }));
 
 const { fetchGroup, updateGroupGames, renameGroup, updateGroupAlerts } = require('../helpers/groupHelpers');
@@ -69,7 +71,9 @@ describe('GroupGovernance', () => {
     await user.click(screen.getByRole('button', { name: 'Controls' }));
     expect(screen.queryByRole('button', { name: 'Archive group' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Leave group' })).toBeInTheDocument();
+    expect(screen.getByText('Notifications')).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Messages' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Scores' })).toBeInTheDocument();
   });
 
   test('copies the invite link and toggles a game', async () => {

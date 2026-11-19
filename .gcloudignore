@@ -1,0 +1,16 @@
+.git
+node_modules
+build
+coverage
+.cursor
+.vscode
+.idea
+uploads
+ios
+src/tests
+.env
+.env.*
+secrets
+*.log
+*.sql.gz
+.DS_Store

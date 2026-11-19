@@ -2,11 +2,9 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ChatMark, GearMark } from '../Brand/Marks';
 import { formatPuzzleDay } from '../../utils/relativeTime';
+import { formatBestGuesses, formatGuesses, weightExplanation } from '../../helpers/scoreHelpers';
+import WeightTip from './WeightTip';
 import { ordinal, periodDays, submissionRatio } from '../../utils/ordinal';
-
-const ENTRY_WORDS = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
-
-const entryWord = (count) => ENTRY_WORDS[count] || String(count);
 
 const Portrait = ({ entry }) => {
   const initial = (entry.display_name || entry.handle || 'R').trim().charAt(0).toUpperCase();
@@ -30,13 +28,13 @@ const periodKicker = (period) => {
   return 'Today';
 };
 
-const emptyBoardTitle = (game, period) => {
-  if (period === 'week' && game?.min_entries) {
-    return `${entryWord(game.min_entries)} scores make the board.`;
-  }
+const emptyBoardTitle = (period) => {
   if (period === 'today') return 'Nothing filed today.';
   return 'Nothing filed.';
 };
+
+const singleDayPeriod = (period, from, to) =>
+  period === 'today' || (period === 'custom' && Boolean(from) && (to || from) === from);
 
 const entriesFor = (board, period) => {
   if (!board) return [];
@@ -61,11 +59,47 @@ const formatStat = (value) => {
 };
 
 const scoreLabel = (entry, board) => {
-  if (board?.rank_basis === 'guesses') {
-    return entry.guesses == null ? '—' : `${entry.guesses}/6`;
-  }
+  if (board?.rank_basis === 'guesses') return formatGuesses(entry.guesses, entry.solved, board.guess_cap);
   return formatStat(entry.score);
 };
+
+const SummaryBoard = ({ entries, guessCap, game }) => (
+  <div className="mt-space-md">
+    <div className="grid grid-cols-4 gap-space-sm border-b border-border py-space-sm">
+      <span className="font-sans text-kicker uppercase tracking-kicker text-muted">Player</span>
+      <span className="text-right font-sans text-kicker uppercase tracking-kicker text-muted">Best</span>
+      <span className="text-right font-sans text-kicker uppercase tracking-kicker text-muted">Avg</span>
+      <span className="text-right font-sans text-kicker uppercase tracking-kicker text-muted">Played</span>
+    </div>
+    <ol>
+      {entries.map((entry) => {
+        const name = entry.display_name || entry.handle;
+        const note = entry.possible != null ? `${entry.solves ?? 0}/${entry.possible} solved` : '';
+        return (
+          <li
+            key={`${entry.user_id}-${entry.score_id}`}
+            className={`grid grid-cols-4 items-center gap-space-sm border-b border-border py-space-sm ${entry.mine ? 'bg-inset' : ''}`}
+          >
+            <span className="flex min-w-0 items-center gap-space-sm">
+              <span className="w-10 shrink-0 font-mono text-body-md text-primary">{ordinal(entry.rank)}</span>
+              <Portrait entry={entry} />
+              <span className="min-w-0 font-sans text-body-md text-primary">
+                {name}
+                {note ? <span className="block font-mono text-caption text-muted">{note}</span> : null}
+              </span>
+            </span>
+            <span className="text-right font-mono text-body-md text-primary">{formatBestGuesses(entry.best, guessCap)}</span>
+            <span className="inline-flex items-center justify-end gap-space-xs text-right font-mono text-body-md text-primary">
+              <span>{formatStat(entry.average)}</span>
+              <WeightTip text={weightExplanation(game, entry)} />
+            </span>
+            <span className="text-right font-mono text-body-md text-primary">{entry.played ?? '—'}</span>
+          </li>
+        );
+      })}
+    </ol>
+  </div>
+);
 
 const BoardEntries = ({ entries, board }) => (
   <ol className="mt-space-md">
@@ -96,10 +130,103 @@ const BoardEntries = ({ entries, board }) => (
   </ol>
 );
 
-const GroupRegister = ({ detail, gameSlug, period, from, to, unreadCount = 0, onOpenParlor }) => {
+const TotalBoard = ({ entries }) => (
+  <div className="mt-space-md">
+    <div className="flex gap-space-sm border-b border-border py-space-sm">
+      <span className="min-w-0 flex-1 font-sans text-kicker uppercase tracking-kicker text-muted">Player</span>
+      <span className="font-sans text-kicker uppercase tracking-kicker text-muted">Total</span>
+    </div>
+    <ol>
+      {entries.map((entry) => {
+        const name = entry.display_name || entry.handle;
+        return (
+          <li
+            key={`${entry.user_id}-${entry.score_id}`}
+            className={`flex items-center gap-space-sm border-b border-border py-space-sm ${entry.mine ? 'bg-inset' : ''}`}
+          >
+            <span className="w-10 shrink-0 font-mono text-body-md text-primary">{ordinal(entry.rank)}</span>
+            <Portrait entry={entry} />
+            <span className="min-w-0 flex-1 font-sans text-body-md text-primary">{name}</span>
+            <span className="font-mono text-body-md text-primary">{formatStat(entry.total ?? entry.score)}</span>
+          </li>
+        );
+      })}
+    </ol>
+  </div>
+);
+
+const AllTimeBoard = ({ entries, game }) => {
+  const solvedShare = game?.slug === 'redactle';
+  return (
+    <div className="mt-space-md">
+      <div className="grid grid-cols-4 gap-space-sm border-b border-border py-space-sm">
+        <span className="font-sans text-kicker uppercase tracking-kicker text-muted">Player</span>
+        <span className="text-right font-sans text-kicker uppercase tracking-kicker text-muted">Average</span>
+        <span className="text-right font-sans text-kicker uppercase tracking-kicker text-muted">{solvedShare ? 'Solved' : 'Multiplier'}</span>
+        <span className="text-right font-sans text-kicker uppercase tracking-kicker text-muted">All time</span>
+      </div>
+      <ol>
+        {entries.map((entry) => {
+          const name = entry.display_name || entry.handle;
+          return (
+            <li
+              key={`${entry.user_id}-${entry.score_id}`}
+              className={`grid grid-cols-4 items-center gap-space-sm border-b border-border py-space-sm ${entry.mine ? 'bg-inset' : ''}`}
+            >
+              <span className="flex min-w-0 items-center gap-space-sm">
+                <span className="w-10 shrink-0 font-mono text-body-md text-primary">{ordinal(entry.rank)}</span>
+                <Portrait entry={entry} />
+                <span className="min-w-0 font-sans text-body-md text-primary">{name}</span>
+              </span>
+              <span className="text-right font-mono text-body-md text-primary">{formatStat(entry.average)}</span>
+              <span className="text-right font-mono text-body-md text-primary">
+                {solvedShare && entry.possible != null
+                  ? `${entry.solves ?? 0}/${entry.possible}`
+                  : `${formatStat(entry.multiplier)}%`}
+              </span>
+              <span className="inline-flex items-center justify-end gap-space-xs text-right font-mono text-body-md text-primary">
+                <span>{formatStat(entry.weighted ?? entry.score)}</span>
+                <WeightTip text={weightExplanation(game, entry)} />
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+};
+
+const listFor = (board, period, kind) => {
+  if (!board) return [];
+  if (period === 'week' && kind === 'scores') return board.weekly_scores || board.weekly_entries || [];
+  if (period === 'week') return board.weekly_leaderboard || board.weekly_entries || [];
+  if (period === 'all' && kind === 'scores') return board.all_time_scores || board.all_time_entries || [];
+  if (period === 'all') return board.all_time_leaderboard || board.all_time_entries || [];
+  return entriesFor(board, period);
+};
+
+const GroupRegister = ({
+  detail,
+  gameSlug,
+  period,
+  from,
+  to,
+  view = '',
+  onView,
+  unreadCount = 0,
+  onOpenParlor,
+}) => {
   const { group, games } = detail;
   const game = games.find((row) => row.slug === gameSlug) || null;
   const board = detail.board?.slug === gameSlug ? detail.board : null;
+  const leaderboardPeriod = period === 'week' || period === 'all';
+  const defaultView = board?.rank_basis === 'guesses' ? 'board' : 'scores';
+  const activeView = view === 'scores' || view === 'board' ? view : defaultView;
+  const showBoard = leaderboardPeriod && activeView === 'board';
+  const entries = showBoard ? listFor(board, period, 'board') : listFor(board, period, 'scores');
+  const wordleWeek = showBoard && period === 'week' && board?.rank_basis === 'guesses';
+  const pointsWeek = showBoard && period === 'week' && board?.rank_basis !== 'guesses';
+  const allTimeBoard = showBoard && period === 'all';
   const ratio = submissionRatio(
     submissionsFor(board, period),
     group.member_count,
@@ -150,10 +277,30 @@ const GroupRegister = ({ detail, gameSlug, period, from, to, unreadCount = 0, on
           <p className="mt-space-lg font-sans text-kicker uppercase tracking-kicker text-secondary">
             {periodKicker(period)}
           </p>
-          {entriesFor(board, period).length ? (
-            <BoardEntries entries={entriesFor(board, period)} board={board} />
+          {leaderboardPeriod ? (
+            <nav aria-label="Board" className="mt-space-md flex gap-space-lg">
+              {[{ id: 'scores', label: 'Scores' }, { id: 'board', label: 'Leaderboard' }].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-pressed={activeView === item.id}
+                  onClick={() => onView?.(item.id)}
+                  className={`border-b-2 py-space-sm font-sans text-kicker uppercase tracking-kicker ${
+                    activeView === item.id ? 'border-secondary text-primary' : 'border-transparent text-muted hover:text-primary'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          ) : null}
+          {entries.length ? (
+            wordleWeek ? <SummaryBoard entries={entries} guessCap={board?.guess_cap} game={board} />
+              : pointsWeek ? <TotalBoard entries={entries} />
+                : allTimeBoard ? <AllTimeBoard entries={entries} game={board} />
+                  : <BoardEntries entries={entries} board={board} />
           ) : (
-            <h2 className="mt-space-sm font-masthead text-headline-md text-primary">{emptyBoardTitle(game, period)}</h2>
+            <h2 className="mt-space-sm font-masthead text-headline-md text-primary">{emptyBoardTitle(period)}</h2>
           )}
         </>
       )}

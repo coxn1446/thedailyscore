@@ -2,6 +2,8 @@ jest.mock('../../server/services/profileService', () => ({
   read: jest.fn(),
   update: jest.fn(),
   updateAlerts: jest.fn(),
+  updateNotifications: jest.fn(),
+  updateNightMode: jest.fn(),
   exportScores: jest.fn(),
   removeAccount: jest.fn(),
 }));
@@ -106,6 +108,19 @@ describe('profile routes', () => {
     expect(patched.status).toBe(403);
     expect(profileService.read).toHaveBeenCalledWith(4, '8', 'all');
     expect(profileService.update).toHaveBeenCalledWith(4, { user_id: 8, handle: 'stolen' });
+  });
+
+  test('saves night mode for the signed-in reader', async () => {
+    profileService.updateNightMode.mockResolvedValue({ user_id: 4, night_mode: true });
+    const patched = await invoke('PATCH', '/', {
+      authenticated: true,
+      body: { night_mode: true },
+    });
+    expect(patched.status).toBe(200);
+    expect(patched.body).toEqual({ user: { user_id: 4, night_mode: true } });
+    expect(profileService.updateNightMode).toHaveBeenCalledWith(4, { night_mode: true });
+    expect(profileService.update).not.toHaveBeenCalled();
+    expect(profileService.updateNotifications).not.toHaveBeenCalled();
   });
 
   test('exports the caller’s csv and deletes the account', async () => {

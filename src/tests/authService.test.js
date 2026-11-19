@@ -124,6 +124,35 @@ describe('authService accounts', () => {
     expect(user.needs_handle).toBe(true);
   });
 
+  test('records the current policy versions when the reader agrees', async () => {
+    query.mockResolvedValueOnce({
+      rows: [{
+        user_id: 4,
+        email: 'ada@example.com',
+        handle: 'ada_l',
+        tos_accepted_version: CURRENT_TOS_VERSION,
+        privacy_accepted_version: CURRENT_PRIVACY_VERSION,
+      }],
+    });
+
+    const user = await authService.acceptCurrentPolicies(4, { acceptedPolicies: true });
+
+    expect(query).toHaveBeenCalledWith(userQueries.acceptPolicies, [
+      4,
+      CURRENT_TOS_VERSION,
+      CURRENT_PRIVACY_VERSION,
+    ]);
+    expect(user.needs_tos_acceptance).toBe(false);
+    expect(user.needs_privacy_acceptance).toBe(false);
+  });
+
+  test('refuses to record policy acceptance without agreement', async () => {
+    await expect(authService.acceptCurrentPolicies(4, { acceptedPolicies: false })).rejects.toThrow(
+      'You must accept the Terms of Service and Privacy Policy'
+    );
+    expect(query).not.toHaveBeenCalled();
+  });
+
   test('claiming a taken handle is rejected', async () => {
     query.mockResolvedValueOnce({
       rows: [{ user_id: 4, handle: null, email: 'ada@example.com' }],

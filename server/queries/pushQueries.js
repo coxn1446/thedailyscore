@@ -18,9 +18,13 @@ const listMemberAlerts = `
 `;
 
 const listTokensForUsers = `
-  SELECT user_id, token
-  FROM device_tokens
-  WHERE user_id = ANY($1::int[])
+  SELECT d.user_id, d.fcm_token
+  FROM device_tokens d
+  JOIN users u ON u.user_id = d.user_id
+  WHERE d.user_id = ANY($1::int[])
+    AND d.fcm_token <> ''
+    AND u.notifications = TRUE
+    AND u.suspended = FALSE
 `;
 
 // remind_daily is on, and no score was posted on the current local date.
@@ -28,6 +32,7 @@ const listReminderCandidates = `
   SELECT u.user_id, u.display_name, u.handle, u.timezone
   FROM users u
   WHERE u.remind_daily = TRUE
+    AND u.notifications = TRUE
     AND u.suspended = FALSE
     AND u.timezone IN (SELECT name FROM pg_timezone_names)
     AND NOT EXISTS (

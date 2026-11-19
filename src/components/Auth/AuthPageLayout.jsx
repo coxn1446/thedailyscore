@@ -1,17 +1,21 @@
 import React from 'react';
 import BrandMark from '../Brand/BrandMark';
 
-const AuthPageLayout = ({ title, children }) => (
-  <div className="flex min-h-dvh w-full justify-center bg-background px-margin py-space-xl animate-fade-up">
-    <div data-testid="auth-panel" className="w-full max-w-md border border-primary bg-background p-space-lg">
-      <div className="border-b border-primary pb-space-md">
-        <BrandMark />
-      </div>
-      <h1 className="mt-space-lg font-masthead text-headline-lg text-primary text-balance">{title}</h1>
+const AuthPageLayout = ({ title, children, mark = true }) => (
+  <div className="flex min-h-dvh w-full justify-center bg-background px-margin pb-safe-bottom pt-safe-top animate-fade-up">
+    <div data-testid="auth-panel" className="w-full max-w-md border border-primary bg-background p-space-lg py-space-xl">
+      {mark ? (
+        <div className="border-b border-primary pb-space-md">
+          <BrandMark />
+        </div>
+      ) : null}
+      <h1 className={`${mark ? 'mt-space-lg' : ''} font-masthead text-headline-lg text-primary text-balance`}>{title}</h1>
       <div className="mt-space-lg">{children}</div>
     </div>
   </div>
 );
+
+export const checkboxClass = 'brand-check';
 
 export const fieldClass =
   'mt-space-xs w-full border border-border-strong bg-background px-space-sm py-space-sm text-base text-primary outline-none focus:border-primary';

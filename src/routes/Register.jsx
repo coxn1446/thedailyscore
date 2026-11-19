@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Navigate, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import AuthPageLayout from '../components/Auth/AuthPageLayout';
+import LegalLinks from '../components/Legal/LegalLinks';
 import RegisterForm from '../components/Auth/RegisterForm';
 import HandleForm from '../components/Auth/HandleForm';
 import { claimHandle, registerWithPassword } from '../helpers/authHelpers';
@@ -51,7 +52,7 @@ const Register = () => {
   }
 
   return (
-    <AuthPageLayout title={choosingHandle ? 'Choose a handle' : 'Create account'}>
+    <AuthPageLayout title={choosingHandle ? 'Choose a handle' : 'Create account'} mark={false}>
       {choosingHandle ? (
         <HandleForm
           displayName={user?.display_name}
@@ -61,6 +62,7 @@ const Register = () => {
       ) : (
         <RegisterForm onSubmit={handleRegister} isSubmitting={isSubmitting} />
       )}
+      <LegalLinks />
     </AuthPageLayout>
   );
 };

@@ -17,8 +17,23 @@ export function pathFromDailyScoreAppUrl(url) {
   return `${pathPart}${parsed.search || ''}`;
 }
 
+const SITE_HOSTS = new Set(['thedailyscore.site', 'qa.thedailyscore.site']);
+
 export function pathFromIncomingAppUrl(url) {
-  return pathFromDailyScoreAppUrl(url);
+  const native = pathFromDailyScoreAppUrl(url);
+  if (native) return native;
+  if (url == null || typeof url !== 'string' || !url.trim()) return null;
+  let parsed;
+  try {
+    parsed = new URL(url.trim());
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'https:') return null;
+  if (!SITE_HOSTS.has(parsed.hostname.toLowerCase())) return null;
+  if (parsed.pathname.startsWith('/api/') || parsed.pathname.startsWith('/.well-known/')) return null;
+  const pathPart = parsed.pathname === '' ? '/' : parsed.pathname;
+  return `${pathPart}${parsed.search || ''}`;
 }
 
 export function stripOAuthHandoffFromInternalPath(path) {

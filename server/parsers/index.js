@@ -2,6 +2,14 @@ const mapTap = require('./mapTap');
 const krillion = require('./krillion');
 const sizeItUp = require('./sizeItUp');
 const wordle = require('./wordle');
+const redactle = require('./redactle');
+const timeGuesser = require('./timeGuesser');
+const semantle = require('./semantle');
+const farflung = require('./farflung');
+const eraly = require('./eraly');
+const fermi = require('./fermi');
+const hivemind = require('./hivemind');
+const noillirk = require('./noillirk');
 
 // A later game is a catalog row plus one module added here.
 const parsers = new Map([
@@ -9,6 +17,14 @@ const parsers = new Map([
   [krillion.slug, krillion],
   [sizeItUp.slug, sizeItUp],
   [wordle.slug, wordle],
+  [redactle.slug, redactle],
+  [timeGuesser.slug, timeGuesser],
+  [semantle.slug, semantle],
+  [farflung.slug, farflung],
+  [eraly.slug, eraly],
+  [fermi.slug, fermi],
+  [hivemind.slug, hivemind],
+  [noillirk.slug, noillirk],
 ]);
 
 const parsePaste = (text, options = {}) => {

@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { fieldClass, labelClass, primaryButtonClass } from '../Auth/AuthPageLayout';
+import { checkboxClass, fieldClass, labelClass, primaryButtonClass } from '../Auth/AuthPageLayout';
 
 const CharterForm = ({ games, onSubmit, isSubmitting, error }) => {
   const [name, setName] = useState('');
   const [tagline, setTagline] = useState('');
-  const [handles, setHandles] = useState('');
   const [selected, setSelected] = useState(() => new Set());
 
   const toggle = (slug) => {
@@ -19,7 +18,7 @@ const CharterForm = ({ games, onSubmit, isSubmitting, error }) => {
   const handleSubmit = (event) => {
     event.preventDefault();
     const picked = games.filter((game) => selected.has(game.slug)).map((game) => game.slug);
-    onSubmit({ name, tagline, handles, games: picked });
+    onSubmit({ name, tagline, games: picked });
   };
 
   return (
@@ -49,19 +48,6 @@ const CharterForm = ({ games, onSubmit, isSubmitting, error }) => {
           className={fieldClass}
         />
       </div>
-      <div>
-        <label htmlFor="group-handles" className={labelClass}>
-          Handles
-        </label>
-        <input
-          id="group-handles"
-          name="handles"
-          value={handles}
-          onChange={(event) => setHandles(event.target.value)}
-          placeholder="@handles"
-          className={fieldClass}
-        />
-      </div>
       <fieldset className="space-y-space-sm">
         <legend className={labelClass}>Games</legend>
         <ul className="mt-space-sm space-y-space-sm">
@@ -72,7 +58,7 @@ const CharterForm = ({ games, onSubmit, isSubmitting, error }) => {
                   type="checkbox"
                   checked={selected.has(game.slug)}
                   onChange={() => toggle(game.slug)}
-                  className="h-4 w-4 border border-primary"
+                  className={checkboxClass}
                 />
                 {game.name}
               </label>

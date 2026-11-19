@@ -28,7 +28,7 @@ const playsGame = (group, slug) => group.enabled_games?.some((game) => game.slug
 
 const iconButtonClass = 'inline-flex shrink-0 border border-primary p-space-sm text-primary hover:bg-primary hover:text-on-primary';
 
-const groupPath = (id, game, period, from, to) => {
+const groupPath = (id, game, period, from, to, view) => {
   const params = new URLSearchParams();
   if (game) params.set('game', game);
   params.set('period', period || 'today');
@@ -36,6 +36,7 @@ const groupPath = (id, game, period, from, to) => {
     params.set('from', from);
     if (to) params.set('to', to);
   }
+  if (view === 'scores' || view === 'board') params.set('view', view);
   return `/groups/${id}?${params.toString()}`;
 };
 
@@ -50,6 +51,9 @@ const Groups = () => {
     : 'today';
   const from = searchParams.get('from') || '';
   const to = searchParams.get('to') || '';
+  const view = searchParams.get('view') === 'scores' || searchParams.get('view') === 'board'
+    ? searchParams.get('view')
+    : '';
   const wide = !(typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches);
   const [directory, setDirectory] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -58,6 +62,7 @@ const Groups = () => {
   const [error, setError] = useState('');
   const [loadError, setLoadError] = useState('');
   const [parlorOpen, setParlorOpen] = useState(false);
+  const [parlorEntered, setParlorEntered] = useState(false);
   const [parlorGame, setParlorGame] = useState(null);
   const [conversations, setConversations] = useState([]);
   const activeSlug = parlorGame || selectedGame;
@@ -108,16 +113,16 @@ const Groups = () => {
     const playing = slug ? directory.groups.filter((group) => playsGame(group, slug)) : directory.groups;
     const target = playing[0];
     if (!target) return;
-    navigate(groupPath(target.group_id, slug, period, from, to), { replace: true });
-  }, [directory, groupId, navigate, showCharter, selectedGame, period, from, to, wide]);
+    navigate(groupPath(target.group_id, slug, period, from, to, view), { replace: true });
+  }, [directory, groupId, navigate, showCharter, selectedGame, period, from, to, view, wide]);
 
   useEffect(() => {
     if (!directory || !selectedGame || showCharter || !groupId) return;
     const playing = directory.groups.filter((group) => playsGame(group, selectedGame));
     if (!playing.length) return;
     if (playing.some((group) => String(group.group_id) === String(groupId))) return;
-    navigate(groupPath(playing[0].group_id, selectedGame, period, from, to), { replace: true });
-  }, [directory, selectedGame, groupId, showCharter, navigate, period]);
+    navigate(groupPath(playing[0].group_id, selectedGame, period, from, to, view), { replace: true });
+  }, [directory, selectedGame, groupId, showCharter, navigate, period, from, to, view]);
 
   useEffect(() => {
     if (!groupId || !selectedGame) {
@@ -165,10 +170,20 @@ const Groups = () => {
   }, [groupId, selectedGame]);
 
   const fromMessages = searchParams.get('chat') === '1' && !wide;
+  const parlorReady = parlorOpen && Boolean(detail);
 
   useEffect(() => {
     setParlorOpen(fromMessages);
   }, [fromMessages]);
+
+  useEffect(() => {
+    if (!parlorReady) {
+      setParlorEntered(false);
+      return undefined;
+    }
+    const frame = requestAnimationFrame(() => setParlorEntered(true));
+    return () => cancelAnimationFrame(frame);
+  }, [parlorReady]);
 
   useEffect(() => {
     if (!fromMessages) return;
@@ -204,7 +219,7 @@ const Groups = () => {
       const nextDirectory = await fetchGroups();
       setDirectory(nextDirectory);
       setShowCharter(false);
-      navigate(groupPath(created.group.group_id, selectedGame, period, from, to));
+      navigate(groupPath(created.group.group_id, selectedGame, period, from, to, view));
     } catch (err) {
       setError(err.message || 'Could not create the group');
     } finally {
@@ -238,9 +253,16 @@ const Groups = () => {
   const unreadFor = (id) => conversations.find(
     (row) => String(row.group_id) === String(id) && row.slug === selectedGame
   )?.unread_count || 0;
+  const unreadForSlug = (slug) => conversations.find(
+    (row) => String(row.group_id) === String(groupId) && row.slug === slug
+  )?.unread_count || 0;
   const parlorGames = [...(detail?.games || [])]
     .filter((game) => game.enabled)
-    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    .sort((a, b) => {
+      const unread = Number(unreadForSlug(b.slug) > 0) - Number(unreadForSlug(a.slug) > 0);
+      if (unread) return unread;
+      return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    });
   const activeGame = parlorGames.find((game) => game.slug === activeSlug)
     || games.find((game) => game.slug === activeSlug);
   const currentPlays = !selectedGame || playing.some((group) => String(group.group_id) === String(groupId));
@@ -251,7 +273,7 @@ const Groups = () => {
         <section data-testid="groups-empty" className="max-w-measure">
           <p className="font-sans text-kicker uppercase tracking-kicker text-secondary">Groups</p>
           <h1 className="mt-space-sm font-masthead text-headline-xl-mobile text-primary text-balance md:text-headline-lg">
-            No syndicates.
+            No Groups
           </h1>
           <CharterForm games={games} onSubmit={handleCharter} isSubmitting={isSubmitting} error={error} />
         </section>
@@ -259,7 +281,7 @@ const Groups = () => {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {switcherGames.length ? (
             <div className="mb-space-lg flex shrink-0 flex-col gap-space-md lg:flex-row lg:flex-wrap lg:items-end lg:gap-x-space-xl">
-              <nav aria-label="Games" className="flex flex-wrap gap-space-lg">
+              <nav aria-label="Games" className="flex flex-wrap gap-space-lg bg-module px-space-md py-space-sm">
                 {switcherGames.map((game) => (
                   <button
                     key={game.slug}
@@ -272,47 +294,49 @@ const Groups = () => {
                   </button>
                 ))}
               </nav>
-              <nav aria-label="Time period" className="flex flex-wrap gap-space-lg">
-                {PERIODS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    aria-pressed={item.id === period}
-                    onClick={() => chooseFilter('period', item.id)}
-                    className={tabClass(item.id === period)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </nav>
-              {period === 'custom' ? (
-                <div className="flex gap-space-sm">
-                  <label className="font-sans text-kicker uppercase tracking-kicker text-muted">
-                    <span className="flex items-center gap-space-xs">
-                      <CalendarMark className="h-4 w-4" />
-                      From
-                    </span>
-                    <input
-                      type="date"
-                      value={from}
-                      onChange={(event) => chooseFilter('from', event.target.value)}
-                      className="mt-space-xs block border border-border-strong bg-background px-space-sm py-space-sm text-base text-primary"
-                    />
-                  </label>
-                  <label className="font-sans text-kicker uppercase tracking-kicker text-muted">
-                    <span className="flex items-center gap-space-xs">
-                      <CalendarMark className="h-4 w-4" />
-                      To
-                    </span>
-                    <input
-                      type="date"
-                      value={to}
-                      onChange={(event) => chooseFilter('to', event.target.value)}
-                      className="mt-space-xs block border border-border-strong bg-background px-space-sm py-space-sm text-base text-primary"
-                    />
-                  </label>
-                </div>
-              ) : null}
+              <div className="flex flex-wrap items-end gap-space-lg bg-inset px-space-md py-space-sm">
+                <nav aria-label="Time period" className="flex flex-wrap gap-space-lg">
+                  {PERIODS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-pressed={item.id === period}
+                      onClick={() => chooseFilter('period', item.id)}
+                      className={tabClass(item.id === period)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </nav>
+                {period === 'custom' ? (
+                  <div className="flex gap-space-sm">
+                    <label className="font-sans text-kicker uppercase tracking-kicker text-muted">
+                      <span className="flex items-center gap-space-xs">
+                        <CalendarMark className="h-4 w-4" />
+                        From
+                      </span>
+                      <input
+                        type="date"
+                        value={from}
+                        onChange={(event) => chooseFilter('from', event.target.value)}
+                        className="mt-space-xs block border border-border-strong bg-background px-space-sm py-space-sm text-base text-primary"
+                      />
+                    </label>
+                    <label className="font-sans text-kicker uppercase tracking-kicker text-muted">
+                      <span className="flex items-center gap-space-xs">
+                        <CalendarMark className="h-4 w-4" />
+                        To
+                      </span>
+                      <input
+                        type="date"
+                        value={to}
+                        onChange={(event) => chooseFilter('to', event.target.value)}
+                        className="mt-space-xs block border border-border-strong bg-background px-space-sm py-space-sm text-base text-primary"
+                      />
+                    </label>
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : null}
           {showCharter && !wide ? (
@@ -344,6 +368,7 @@ const Groups = () => {
               period={period}
               from={from}
               to={to}
+              view={view}
               onCharter={() => {
                 setError('');
                 setShowCharter(true);
@@ -375,6 +400,8 @@ const Groups = () => {
                 period={period}
                 from={from}
                 to={to}
+                view={view}
+                onView={(next) => chooseFilter('view', next)}
                 unreadCount={unreadFor(groupId)}
                 onOpenParlor={() => {
                   setParlorGame(selectedGame);
@@ -391,8 +418,8 @@ const Groups = () => {
             </div>
           ) : null}
           </div>
-          {parlorOpen && detail ? (
-            <div className="absolute inset-0 z-50 flex flex-col overflow-hidden overscroll-none bg-background px-margin py-space-lg lg:hidden">
+          {parlorReady ? (
+            <div className={`absolute inset-0 z-50 flex flex-col overflow-hidden overscroll-none bg-background px-margin pb-safe-bottom pt-safe-top transition-transform duration-300 lg:hidden ${parlorEntered ? 'translate-x-0' : 'translate-x-full'}`}>
               <div className="mx-auto flex w-full max-w-measure shrink-0 items-start justify-between gap-space-md">
                 <h2 className="font-masthead text-headline-lg text-primary">
                   {activeGame ? `${detail.group.name} - ${activeGame.name}` : 'Chat'}

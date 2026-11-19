@@ -1,16 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchGazette } from '../../helpers/scoreHelpers';
+import { fetchGazette, formatGuesses } from '../../helpers/scoreHelpers';
 import { relativeTime } from '../../utils/relativeTime';
 
 const linkClass =
   'font-sans text-body-md text-primary underline decoration-primary underline-offset-2 hover:text-secondary hover:decoration-secondary';
 
 const markFor = (card) => {
-  if (card.rank_basis === 'guesses') {
-    if (!card.solved || card.guesses == null) return 'X/6';
-    return `${card.guesses}/6`;
-  }
+  if (card.rank_basis === 'guesses') return formatGuesses(card.guesses, card.solved, card.guess_cap);
   if (card.score == null) return '—';
   return String(card.score);
 };

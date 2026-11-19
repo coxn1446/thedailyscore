@@ -6,6 +6,8 @@ const gameRequestQueries = require('./gameRequestQueries');
 const parlorQueries = require('./parlorQueries');
 const deviceQueries = require('./deviceQueries');
 const pushQueries = require('./pushQueries');
+const friendQueries = require('./friendQueries');
+const feedQueries = require('./feedQueries');
 
 module.exports = {
   userQueries,
@@ -16,4 +18,6 @@ module.exports = {
   parlorQueries,
   deviceQueries,
   pushQueries,
+  friendQueries,
+  feedQueries,
 };

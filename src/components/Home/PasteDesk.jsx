@@ -1,16 +1,38 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { fieldClass, inkButtonClass } from '../Auth/AuthPageLayout';
+import { inkButtonClass } from '../Auth/AuthPageLayout';
+import { CopyMark } from '../Brand/Marks';
 import PublishForm from './PublishForm';
-import { formatResult, postScore, previewScore } from '../../helpers/scoreHelpers';
+import StoryShare from '../Share/StoryShare';
+import instagramLogo from '../../assets/instagram.png';
+import GameLogo from '../Brand/GameLogo';
+import GameMenu from './GameMenu';
+import { SCORE_POSTED, fetchTodayScores, formatResult, formatTodayCopy, postScore, previewScore } from '../../helpers/scoreHelpers';
+import { copyText } from '../../utils/copyText';
+
+const PASTE_KEY = 'ds:pending-paste';
+
+const iosApp = () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
 
 const linkClass =
   'font-sans text-body-md text-primary underline decoration-primary underline-offset-2 hover:text-secondary hover:decoration-secondary';
 
+const savedPaste = () => {
+  try {
+    return sessionStorage.getItem(PASTE_KEY) || '';
+  } catch {
+    return '';
+  }
+};
+
 const ResultBlock = ({ result }) => (
   <div>
-    <p className="font-sans text-kicker uppercase tracking-kicker text-secondary">{result.game.name}</p>
+    <p className="flex items-center gap-space-sm font-sans text-kicker uppercase tracking-kicker text-secondary">
+      <GameLogo slug={result.game?.slug} />
+      {result.game.name}
+    </p>
     <p className="mt-space-xs font-mono text-caption text-muted">#{result.puzzle_number}</p>
     <p className="mt-space-sm font-mono text-headline-md text-primary">{formatResult(result)}</p>
     {result.snippet ? (
@@ -20,24 +42,6 @@ const ResultBlock = ({ result }) => (
     ) : null}
   </div>
 );
-
-const PostedGroups = ({ groups }) => {
-  if (!groups.length) return null;
-  return (
-    <ul className="mt-space-lg space-y-space-sm">
-      {groups.map((group) => (
-        <li key={group.group_id}>
-          <Link to={`/groups/${group.group_id}`} className={linkClass}>
-            {group.name}
-          </Link>
-          <p className="font-mono text-caption text-muted">
-            {group.rank == null ? 'Unranked' : `Rank ${group.rank}`}
-          </p>
-        </li>
-      ))}
-    </ul>
-  );
-};
 
 const PasteError = ({ message }) => {
   if (!message) return null;
@@ -58,15 +62,24 @@ const PasteError = ({ message }) => {
   );
 };
 
-const PasteDesk = () => {
+const PasteDesk = ({ onPosted, games = [], onOpenGame }) => {
   const [phase, setPhase] = useState('empty');
-  const [paste, setPaste] = useState('');
+  const [paste, setPaste] = useState(savedPaste);
   const [preview, setPreview] = useState(null);
-  const [posted, setPosted] = useState(null);
-  const [selectedGroups, setSelectedGroups] = useState(() => new Set());
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const actionRef = useRef(() => {});
+  const todayCopyRef = useRef(undefined);
+
+  const rememberToday = (data) => {
+    todayCopyRef.current = data?.scores?.length ? formatTodayCopy(data) : null;
+  };
+
+  const loadTodayCopy = () => fetchTodayScores().then((data) => {
+    rememberToday(data);
+    return todayCopyRef.current;
+  });
 
   const submit = async () => {
     if (pending) return;
@@ -75,7 +88,6 @@ const PasteDesk = () => {
     try {
       const data = await previewScore(paste);
       setPreview(data);
-      setSelectedGroups(new Set((data.groups || []).map((group) => group.group_id)));
       setPhase('preview');
     } catch (err) {
       setPreview(null);
@@ -91,9 +103,19 @@ const PasteDesk = () => {
     setPending(true);
     setError('');
     try {
-      await postScore(paste, [...selectedGroups]);
-      toast.success('Saved');
-      reset();
+      const saved = await postScore(paste, []);
+      const personal = saved?.personal || {};
+      if (personal.best_all) toast.success('Best all time.');
+      else if (personal.best_week) toast.success('Best this week.');
+      else toast.success('Saved');
+      todayCopyRef.current = undefined;
+      loadTodayCopy().catch(() => {});
+      setPaste('');
+      setPreview(null);
+      setPhase('empty');
+      if (saved?.global_rank != null) toast.success(`Rank ${saved.global_rank}`);
+      window.dispatchEvent(new Event(SCORE_POSTED));
+      if (onPosted) onPosted(saved);
     } catch (err) {
       setError(err.message || 'Could not post');
     } finally {
@@ -102,10 +124,29 @@ const PasteDesk = () => {
   };
 
   actionRef.current = () => {
-    if (pending || phase === 'posted') return;
+    if (pending) return;
     if (phase === 'preview') confirm();
     else submit();
   };
+
+  useEffect(() => {
+    try {
+      if (paste) sessionStorage.setItem(PASTE_KEY, paste);
+      else sessionStorage.removeItem(PASTE_KEY);
+    } catch {
+      /* private mode */
+    }
+  }, [paste]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadTodayCopy().catch(() => {
+      if (!cancelled) todayCopyRef.current = undefined;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (event) => {
@@ -122,16 +163,37 @@ const PasteDesk = () => {
     setError('');
   };
 
-  const reset = () => {
-    setPaste('');
-    setPreview(null);
-    setPosted(null);
-    setError('');
-    setPhase('empty');
+  const copyToday = async () => {
+    if (pending) return;
+    let text = todayCopyRef.current;
+    if (text === undefined) {
+      setPending(true);
+      try {
+        text = await loadTodayCopy();
+      } catch (err) {
+        toast.error(err.message || 'Could not copy');
+        return;
+      } finally {
+        setPending(false);
+      }
+    }
+    if (!text) {
+      toast.error('Nothing filed today.');
+      return;
+    }
+    try {
+      await copyText(text);
+      toast.success('Copied');
+    } catch (err) {
+      toast.error(err.message || 'Could not copy');
+    }
   };
 
   return (
     <section data-testid="desk-home" className="w-full animate-fade-up lg:max-w-measure">
+      <h1 className="font-masthead text-headline-xl-mobile text-primary text-balance md:text-headline-lg">
+        What did you play today?
+      </h1>
       {phase === 'empty' ? (
         <form
           onSubmit={(event) => {
@@ -139,66 +201,68 @@ const PasteDesk = () => {
             submit();
           }}
         >
-          <h1 className="font-masthead text-headline-xl-mobile text-primary text-balance md:text-headline-lg">
-            What did you play today?
-          </h1>
-          <textarea
-            id="result-paste"
-            aria-label="Result"
-            value={paste}
-            onChange={(event) => {
-              setPaste(event.target.value);
-              if (error) setError('');
-            }}
-            spellCheck={false}
-            autoCapitalize="off"
-            rows={8}
-            placeholder="copy and paste your score from any daily game here."
-            className={`${fieldClass} font-mono`}
-          />
+          <div className="mt-space-md border border-border-strong bg-background focus-within:border-primary">
+            <textarea
+              id="result-paste"
+              aria-label="Result"
+              value={paste}
+              onChange={(event) => {
+                setPaste(event.target.value);
+                if (error) setError('');
+              }}
+              spellCheck={false}
+              autoCapitalize="off"
+              rows={3}
+              placeholder="copy and paste your score from any daily game here."
+              className="w-full resize-none bg-background px-space-sm pt-space-sm font-mono text-base text-primary outline-none"
+            />
+            <div className="flex items-center gap-space-sm border-t border-border px-space-sm py-space-sm">
+              <GameMenu games={games} onOpen={onOpenGame || (() => {})} />
+              <button
+                type="button"
+                aria-label="Copy Today's Score"
+                disabled={pending}
+                onClick={copyToday}
+                className="text-primary hover:text-secondary"
+              >
+                <CopyMark />
+              </button>
+              {iosApp() ? (
+                <button
+                  type="button"
+                  aria-label="Share to Instagram"
+                  onClick={() => setShareOpen(true)}
+                  className="text-primary"
+                >
+                  <img src={instagramLogo} alt="" className="h-5 w-5 object-contain" />
+                </button>
+              ) : null}
+              <button type="submit" disabled={pending} className={`${inkButtonClass} ml-auto`}>
+                Submit
+              </button>
+            </div>
+          </div>
           <PasteError message={error} />
-          <button type="submit" disabled={pending} className={`${inkButtonClass} mt-space-md w-full justify-center lg:w-auto`}>
-            Submit
-          </button>
         </form>
       ) : null}
 
       {phase === 'preview' && preview ? (
-        <div>
-          <ResultBlock result={preview} />
-          <PublishForm
-            groups={preview.groups || []}
-            selected={selectedGroups}
-            pending={pending}
-            error={error}
-            onSubmit={confirm}
-            onEdit={edit}
-            onToggle={(groupId) => {
-              setSelectedGroups((current) => {
-                const next = new Set(current);
-                if (next.has(groupId)) next.delete(groupId);
-                else next.add(groupId);
-                return next;
-              });
-            }}
-            onToggleAll={() => {
-              const groups = preview.groups || [];
-              const allOn = groups.length > 0 && groups.every((group) => selectedGroups.has(group.group_id));
-              setSelectedGroups(allOn ? new Set() : new Set(groups.map((group) => group.group_id)));
-            }}
-          />
-        </div>
+        <form
+          className="mt-space-md"
+          onSubmit={(event) => {
+            event.preventDefault();
+            confirm();
+          }}
+        >
+          <div className="border border-border-strong bg-background">
+            <div className="px-space-sm pt-space-sm">
+              <ResultBlock result={preview} />
+            </div>
+            <PublishForm pending={pending} error={error} onEdit={edit} />
+          </div>
+        </form>
       ) : null}
-
-      {phase === 'posted' && posted ? (
-        <div>
-          <ResultBlock result={posted} />
-          <PostedGroups groups={posted.groups || []} />
-          <button type="button" onClick={reset} className={`${inkButtonClass} mt-space-lg`}>
-            Paste another
-          </button>
-        </div>
-      ) : null}
+      {shareOpen ? <StoryShare onClose={() => setShareOpen(false)} /> : null}
     </section>
   );
 };

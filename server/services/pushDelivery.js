@@ -7,15 +7,22 @@ const STALE = new Set([
 
 const deliver = async (tokens, message) => {
   const unique = [...new Set((tokens || []).filter((token) => typeof token === 'string' && token))];
-  if (!unique.length) return { sent: 0, stale: [] };
+  const type = message?.data?.type || 'push';
+  if (!unique.length) {
+    console.log('[push] delivery stop', { type, reason: 'no tokens' });
+    return { sent: 0, stale: [] };
+  }
   const admin = getFirebaseAdmin();
-  if (!admin) return { sent: 0, stale: [] };
+  if (!admin) {
+    console.warn('[push] delivery stop', { type, reason: 'firebase admin missing' });
+    return { sent: 0, stale: [] };
+  }
   const messaging = admin.messaging();
   let sent = 0;
   const stale = [];
   for (const token of unique) {
     try {
-      await messaging.send({
+      const messageId = await messaging.send({
         token,
         notification: {
           title: message.title,
@@ -29,8 +36,17 @@ const deliver = async (tokens, message) => {
         },
       });
       sent += 1;
+      console.log('[push] firebase accepted', { type, title: message.title, messageId });
     } catch (err) {
-      if (STALE.has(err?.code)) stale.push(token);
+      const expired = STALE.has(err?.code);
+      if (expired) stale.push(token);
+      console.warn('[push] firebase rejected', {
+        type,
+        title: message.title,
+        code: err?.code || 'unknown',
+        message: err?.message || 'send failed',
+        stale: expired,
+      });
     }
   }
   return { sent, stale };

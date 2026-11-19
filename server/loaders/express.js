@@ -7,7 +7,8 @@ const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const pgSession = require('connect-pg-simple')(session);
 const { getPool, isDbHealthy } = require('../db');
-const { getSessionCookieSameSiteAndSecure } = require('../utils/sessionCookieSettings');
+const { buildSessionOptions } = require('../utils/sessionOptions');
+const { getDevelopmentClientOrigins } = require('../helpers/devClientOrigins');
 
 module.exports = async ({ app }) => {
   const env = process.env.NODE_ENV || 'development';
@@ -15,9 +16,18 @@ module.exports = async ({ app }) => {
 
   app.set('trust proxy', 1);
 
+  const clientOrigin = process.env.DEFAULT_CLIENT_URL || 'http://localhost:3000';
   app.use(
     cors({
-      origin: process.env.DEFAULT_CLIENT_URL || 'http://localhost:3000',
+      origin: isProd
+        ? clientOrigin
+        : (origin, callback) => {
+          if (!origin || origin === clientOrigin || getDevelopmentClientOrigins().includes(origin)) {
+            callback(null, true);
+            return;
+          }
+          callback(null, false);
+        },
       credentials: true,
     })
   );
@@ -44,18 +54,10 @@ module.exports = async ({ app }) => {
     })
   );
 
-  const sessionOptions = {
-    secret: process.env.SESSION_SECRET || 'dev-session-secret-change-me',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-      ...getSessionCookieSameSiteAndSecure({
-        defaultClientUrl: process.env.DEFAULT_CLIENT_URL || 'http://localhost:3000',
-      }),
-    },
-  };
+  const sessionOptions = buildSessionOptions({
+    secret: process.env.SESSION_SECRET,
+    defaultClientUrl: process.env.DEFAULT_CLIENT_URL,
+  });
 
   if (isDbHealthy()) {
     sessionOptions.store = new pgSession({

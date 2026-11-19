@@ -1,11 +1,17 @@
+const clearFcmToken = `
+  DELETE FROM device_tokens
+  WHERE fcm_token = $1 AND token <> $2
+`;
+
 const upsertToken = `
-  INSERT INTO device_tokens (user_id, token, platform)
-  VALUES ($1, $2, $3)
+  INSERT INTO device_tokens (user_id, token, fcm_token, platform)
+  VALUES ($1, $2, $3, $4)
   ON CONFLICT (token) DO UPDATE
   SET user_id = EXCLUDED.user_id,
+      fcm_token = EXCLUDED.fcm_token,
       platform = EXCLUDED.platform,
       updated_at = NOW()
-  RETURNING device_token_id, user_id, token, platform
+  RETURNING device_token_id, user_id, token, fcm_token, platform
 `;
 
 const deleteToken = `
@@ -16,10 +22,11 @@ const deleteToken = `
 
 const deleteTokens = `
   DELETE FROM device_tokens
-  WHERE token = ANY($1::text[])
+  WHERE fcm_token = ANY($1::text[])
 `;
 
 module.exports = {
+  clearFcmToken,
   upsertToken,
   deleteToken,
   deleteTokens,

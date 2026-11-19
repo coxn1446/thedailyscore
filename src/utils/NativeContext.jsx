@@ -7,12 +7,6 @@ const NativeContext = createContext({
   keyboardVisible: false,
 });
 
-const applyStatusBar = async () => {
-  const { StatusBar, Style } = await import('@capacitor/status-bar');
-  await StatusBar.setStyle({ style: Style.Light });
-  await StatusBar.setBackgroundColor({ color: '#FBF9F5' });
-};
-
 export const NativeProvider = ({ children }) => {
   const [value, setValue] = useState({
     isNative: Capacitor.isNativePlatform(),
@@ -63,12 +57,6 @@ export const NativeProvider = ({ children }) => {
         await SplashScreen.hide();
       } catch {
         /* splash screen plugin may be unavailable */
-      }
-
-      try {
-        await applyStatusBar();
-      } catch {
-        /* status bar optional on web */
       }
 
       if (!cancelled) {

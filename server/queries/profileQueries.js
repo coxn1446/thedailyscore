@@ -5,12 +5,19 @@ const listStats = `
     ga.slug,
     ga.name,
     ga.rank_basis,
+    ga.guess_cap,
     ga.sort_order,
     COUNT(*)::int AS played,
     COUNT(*) FILTER (WHERE s.solved)::int AS solved_count,
+    COUNT(*) FILTER (WHERE NOT s.solved)::int AS gave_up,
     ROUND(AVG(s.score)::numeric, 1) AS average_score,
     ROUND(AVG(s.guesses) FILTER (WHERE s.solved)::numeric, 1) AS average_guesses,
-    MAX(s.score) AS best_score,
+    ROUND(AVG(s.duration_seconds) FILTER (WHERE s.solved)::numeric, 0) AS average_duration_seconds,
+    ROUND(AVG(s.hints) FILTER (WHERE s.solved)::numeric, 1) AS average_hints,
+    CASE
+      WHEN ga.sort_direction = 'lower' AND ga.rank_basis = 'score' THEN MIN(s.score)
+      ELSE MAX(s.score)
+    END AS best_score,
     MIN(s.guesses) FILTER (WHERE s.solved AND s.guesses IS NOT NULL) AS best_guesses
   FROM scores s
   JOIN games ga ON ga.game_id = s.game_id
@@ -29,7 +36,7 @@ const listStats = `
         AND s.played_on < (date_trunc('month', NOW() AT TIME ZONE u.timezone) + INTERVAL '1 month')::date
       )
     )
-  GROUP BY ga.game_id, ga.slug, ga.name, ga.rank_basis, ga.sort_order
+  GROUP BY ga.game_id, ga.slug, ga.name, ga.rank_basis, ga.guess_cap, ga.sort_order
   ORDER BY ga.sort_order ASC, ga.game_id ASC
 `;
 
@@ -40,6 +47,8 @@ const listExport = `
     s.score,
     s.guesses,
     s.solved,
+    s.duration_seconds,
+    s.hints,
     s.created_at
   FROM scores s
   JOIN games ga ON ga.game_id = s.game_id
@@ -53,6 +62,24 @@ const updateAlerts = `
     remind_daily = $2,
     alert_crown = $3,
     alert_new_member = $4,
+    updated_at = NOW()
+  WHERE user_id = $1
+  RETURNING ${USER_FIELDS}
+`;
+
+const updateNotifications = `
+  UPDATE users
+  SET
+    notifications = $2,
+    updated_at = NOW()
+  WHERE user_id = $1
+  RETURNING ${USER_FIELDS}
+`;
+
+const updateNightMode = `
+  UPDATE users
+  SET
+    night_mode = $2,
     updated_at = NOW()
   WHERE user_id = $1
   RETURNING ${USER_FIELDS}
@@ -137,11 +164,27 @@ const deleteUser = `
   RETURNING user_id
 `;
 
+const listUserGames = `
+  SELECT ga.slug, ug.enabled
+  FROM user_games ug
+  JOIN games ga ON ga.game_id = ug.game_id
+  WHERE ug.user_id = $1
+`;
+
+const upsertUserGame = `
+  INSERT INTO user_games (user_id, game_id, enabled)
+  VALUES ($1, $2, $3)
+  ON CONFLICT (user_id, game_id) DO UPDATE
+  SET enabled = EXCLUDED.enabled
+`;
+
 module.exports = {
   listStats,
   listExport,
   updateProfile,
   updateAlerts,
+  updateNotifications,
+  updateNightMode,
   deleteOwnPublications,
   deleteOwnScores,
   promoteReplacementCurator,
@@ -149,4 +192,6 @@ module.exports = {
   deleteCharteredGroups,
   deleteMemberships,
   deleteUser,
+  listUserGames,
+  upsertUserGame,
 };

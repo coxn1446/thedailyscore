@@ -1,6 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { PlusMark, UnreadMark } from '../Brand/Marks';
+import { formatBestGuesses, formatGuesses, weightExplanation } from '../../helpers/scoreHelpers';
+import WeightTip from './WeightTip';
 import { ordinal, periodDays, submissionRatio } from '../../utils/ordinal';
 
 const standingFor = (group, selectedGame) =>
@@ -18,29 +20,109 @@ const RANK_COLUMNS = [
   { id: 'all', label: 'All Time Rank', value: (standing) => standing?.all_time_rank },
 ];
 
-const statLine = (standing, basis, period) => {
-  if (!standing) return [];
-  if (period === 'today') {
-    return [{ label: basis === 'guesses' ? 'Guesses' : 'Score', value: formatStat(standing.daily_score) }];
+const guessMark = (value, solved, cap) => {
+  if (value == null || Number.isNaN(Number(value))) {
+    if (solved === false) return formatGuesses(null, false, cap);
+    return '—';
   }
-  if (period === 'week') {
-    const best = formatStat(standing.weekly_best);
-    const average = formatStat(standing.weekly_average);
-    if (basis === 'guesses') {
-      return [
-        { label: 'Best', value: best },
-        { label: 'Average', value: average },
-      ];
-    }
+  return formatGuesses(value, solved === false ? false : true, cap);
+};
+
+const singleDayPeriod = (period, from, to) =>
+  period === 'today' || (period === 'custom' && Boolean(from) && (to || from) === from);
+
+const statLine = (standing, basis, period, from, to) => {
+  if (!standing) return [];
+  if (basis === 'guesses' && singleDayPeriod(period, from, to)) {
+    const solved = period === 'today' ? standing.daily_solved : standing.custom_solved;
+    const value = period === 'today' ? standing.daily_score : standing.custom_score;
+    return [{ label: 'Guesses', value: guessMark(value, solved, standing.guess_cap) }];
+  }
+  if (period === 'today') {
+    return [{ label: 'Score', value: formatStat(standing.daily_score) }];
+  }
+  if (period === 'all' && standing.all_time_multiplier != null) {
+    const solvedShare = standing.slug === 'redactle' && standing.all_time_possible != null;
     return [
-      { label: 'Best', value: best },
-      { label: 'Total', value: formatStat(standing.weekly_score) },
-      { label: 'Average', value: average },
+      { label: 'Average', value: formatStat(standing.all_time_average) },
+      solvedShare
+        ? { label: 'Solved', value: `${standing.all_time_solves ?? 0}/${standing.all_time_possible}` }
+        : { label: 'Multiplier', value: `${formatStat(standing.all_time_multiplier)}%` },
+      {
+        label: 'All time',
+        value: formatStat(standing.all_time_weighted),
+        weight: true,
+        slug: standing.slug,
+        rank_basis: standing.rank_basis,
+        entry: {
+          average: standing.all_time_average,
+          solves: standing.all_time_solves,
+          gave_up: standing.all_time_gave_up,
+          possible: standing.all_time_possible,
+          attempt_percent: standing.all_time_attempt,
+          solve_percent: standing.all_time_solve,
+        },
+      },
     ];
   }
   if (basis === 'guesses') {
-    const average = period === 'all' ? standing.all_time_average : standing.custom_average;
-    return [{ label: 'Average', value: formatStat(average) }];
+    const best = period === 'week'
+      ? standing.weekly_best
+      : period === 'all'
+        ? standing.all_time_score
+        : standing.custom_best;
+    const average = period === 'week'
+      ? standing.weekly_average
+      : period === 'all'
+        ? standing.all_time_average
+        : standing.custom_average;
+    const played = period === 'week'
+      ? standing.weekly_played
+      : period === 'all'
+        ? standing.all_time_played
+        : standing.custom_played;
+    const solvedCount = period === 'week'
+      ? standing.weekly_solves
+      : period === 'custom'
+        ? standing.custom_solves
+        : standing.all_time_solves;
+    const possible = period === 'week'
+      ? standing.weekly_possible
+      : period === 'custom'
+        ? standing.custom_possible
+        : standing.all_time_possible;
+    const line = [
+      { label: 'Best', value: guessMark(best, true, standing.guess_cap) },
+      {
+        label: 'Average',
+        value: formatStat(average),
+        weight: true,
+        slug: standing.slug,
+        rank_basis: basis,
+        entry: {
+          average,
+          solves: solvedCount,
+          gave_up: period === 'week'
+            ? standing.weekly_gave_up
+            : period === 'custom'
+              ? standing.custom_gave_up
+              : standing.all_time_gave_up,
+          possible,
+        },
+      },
+      { label: 'Played', value: formatStat(played) },
+    ];
+    if (standing.slug === 'redactle' && possible != null) {
+      line.push({ label: 'Solved', value: `${solvedCount ?? 0}/${possible}` });
+    }
+    return line;
+  }
+  if (period === 'week') {
+    return [
+      { label: 'Best', value: formatStat(standing.weekly_best) },
+      { label: 'Total', value: formatStat(standing.weekly_score) },
+      { label: 'Average', value: formatStat(standing.weekly_average) },
+    ];
   }
   if (period === 'all') {
     return [
@@ -62,10 +144,10 @@ const submissionsFor = (standing, period) => {
   return standing.submissions_today;
 };
 
-const GroupDirectory = ({ groups, selectedId, selectedGame, period, from, to, onCharter }) => {
+const GroupDirectory = ({ groups, selectedId, selectedGame, period, from, to, view, onCharter }) => {
   const basis = groups.map((group) => standingFor(group, selectedGame)?.rank_basis).find(Boolean) || 'score';
   const reader = groups.find((group) => String(group.group_id) === String(selectedId)) || groups[0];
-  const stats = statLine(standingFor(reader, selectedGame), basis, period);
+  const stats = statLine(standingFor(reader, selectedGame), basis, period, from, to);
   const headerClass = 'pb-space-sm text-right font-sans text-kicker font-normal uppercase tracking-kicker text-muted';
   const cellClass = 'border-b border-border py-space-sm text-right font-mono text-body-md text-primary';
 
@@ -87,7 +169,12 @@ const GroupDirectory = ({ groups, selectedId, selectedGame, period, from, to, on
           {stats.map((stat) => (
             <div key={stat.label}>
               <dt className="font-sans text-kicker uppercase tracking-kicker text-muted">{stat.label}</dt>
-              <dd className="font-mono text-body-md text-primary">{stat.value}</dd>
+              <dd className="inline-flex items-center gap-space-xs font-mono text-body-md text-primary">
+                <span>{stat.value}</span>
+                {stat.weight ? (
+                  <WeightTip text={weightExplanation({ slug: stat.slug, rank_basis: stat.rank_basis }, stat.entry)} />
+                ) : null}
+              </dd>
             </div>
           ))}
         </dl>
@@ -122,6 +209,7 @@ const GroupDirectory = ({ groups, selectedId, selectedGame, period, from, to, on
               params.set('from', from);
               if (to) params.set('to', to);
             }
+            if (view === 'scores' || view === 'board') params.set('view', view);
             const unread = Number(group.unread_count) > 0;
             return (
               <tr key={group.group_id} className={selected ? 'bg-inset' : undefined}>

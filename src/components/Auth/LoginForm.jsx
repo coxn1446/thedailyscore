@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import LegalLinks from '../Legal/LegalLinks';
 import OAuthButtons from './OAuthButtons';
 import { fieldClass, labelClass, primaryButtonClass } from './AuthPageLayout';
 
@@ -14,7 +16,6 @@ const LoginForm = ({ onSubmit, isSubmitting }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-space-md">
-      <OAuthButtons />
       <div>
         <label htmlFor="identifier" className={labelClass}>
           Email or handle
@@ -48,16 +49,22 @@ const LoginForm = ({ onSubmit, isSubmitting }) => {
         Sign in
       </button>
       <p className="text-center font-sans text-caption text-muted">
-        <Link to="/forgot-password" className="underline decoration-primary underline-offset-2 hover:text-secondary">
+        <button
+          type="button"
+          onClick={() => toast('Reach Out to Will')}
+          className="underline decoration-primary underline-offset-2 hover:text-secondary"
+        >
           Forgot password?
-        </Link>
+        </button>
       </p>
+      <OAuthButtons />
       <p className="text-center font-sans text-body-md text-primary">
         No account?{' '}
         <Link to="/register" className="underline decoration-primary underline-offset-2 hover:text-secondary">
           Create one
         </Link>
       </p>
+      <LegalLinks />
     </form>
   );
 };

@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { useSelector } from 'react-redux';
 import { selectIsAuthenticated, selectUser } from '../../store/auth.reducer';
-import { registerDevice } from '../../helpers/deviceHelpers';
+import { ensurePushRegistration } from '../../helpers/pushRegistration';
 
 const PushWatcher = () => {
   const isAuthenticated = useSelector(selectIsAuthenticated);
@@ -10,32 +10,27 @@ const PushWatcher = () => {
 
   useEffect(() => {
     if (!isAuthenticated || !user?.user_id || !Capacitor.isNativePlatform()) return undefined;
-    let removeRegistration;
+    let removeState;
     let cancelled = false;
+
+    ensurePushRegistration({ request: true }).catch(() => {});
 
     (async () => {
       try {
-        const { PushNotifications } = await import('@capacitor/push-notifications');
-        let perm = await PushNotifications.checkPermissions();
-        if (perm.receive === 'prompt') {
-          perm = await PushNotifications.requestPermissions();
-        }
-        if (perm.receive !== 'granted' || cancelled) return;
-        const handle = await PushNotifications.addListener('registration', (token) => {
-          const value = token?.value;
-          if (!value || cancelled) return;
-          registerDevice(value, Capacitor.getPlatform()).catch(() => {});
+        const { App } = await import('@capacitor/app');
+        const handle = await App.addListener('appStateChange', ({ isActive }) => {
+          if (cancelled || !isActive) return;
+          ensurePushRegistration({ request: false }).catch(() => {});
         });
-        removeRegistration = handle;
-        await PushNotifications.register();
+        removeState = handle;
       } catch {
-        /* push plugin optional on web */
+        /* app plugin optional on web */
       }
     })();
 
     return () => {
       cancelled = true;
-      removeRegistration?.remove?.();
+      removeState?.remove?.();
     };
   }, [isAuthenticated, user?.user_id]);
 

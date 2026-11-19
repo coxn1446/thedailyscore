@@ -17,6 +17,21 @@ Visual source of truth for The Daily Score. Corners are square. There are no dro
 | Strong rule | `border-strong` | `#D8D4CC` |
 | Error | `error` | `#BA1A1A` |
 
+Night mode uses the same tokens. `html.night` swaps the values below. Carmine is lifted so kickers and the primary-button hover stay readable on ink.
+
+| Role | Token | Night |
+| --- | --- | --- |
+| Paper | `background`, `surface` | `#111111` |
+| Archival inset | `inset` | `#1A1916` |
+| Module | `module` | `#22211E` |
+| Ink | `primary` | `#FBF9F5` |
+| Button label | `on-primary` | `#111111` |
+| Carmine | `secondary` | `#C45C5C` |
+| Charcoal | `muted` | `#B0ACA4` |
+| Rule | `border` | `#2C2A26` |
+| Strong rule | `border-strong` | `#322F2B` |
+| Error | `error` | `#E07070` |
+
 Carmine is for kickers, the active desk, the live dateline, and the hover state of a primary button. It does not fill large surfaces.
 
 ## Type
@@ -36,6 +51,7 @@ Interactive elements, inputs, portraits, and images use `0` radius. Inputs use a
 - **Primary button:** square, ink fill, paper label, uppercase tracked Inter. Hover turns carmine.
 - **Secondary button:** 1px ink rule, transparent fill, ink label. Hover inverts to ink fill and paper label.
 - **Text link:** 1px ink underline, 2px offset. Hover shifts the underline and text to carmine.
+- **Checkbox:** square, 1px ink rule, paper fill. Checked fills with ink and a paper mark. Disabled uses the strong rule and inset fill.
 
 ## Voice
 

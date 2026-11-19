@@ -11,10 +11,17 @@ const schema = fs.readFileSync(path.join(__dirname, '../../server/db/schema.sql'
 describe('group catalog sql', () => {
   test('seeds the four MVP games and their boards', () => {
     const tuples = [
-      "('map-tap', 'Map Tap', 'higher', 'score', 'daily', NULL, '00:00', 1)",
-      "('krillion', 'Krillion', 'higher', 'score', 'daily', NULL, '00:00', 2)",
-      "('size-it-up', 'Size it Up', 'higher', 'score', 'daily', NULL, '00:00', 3)",
-      "('wordle', 'Wordle', 'lower', 'guesses', 'weekly', 4, '00:00', 4)",
+      "('map-tap', 'Map Tap', 'higher', 'score', 'daily', NULL, NULL, '00:00', 1)",
+      "('krillion', 'Krillion', 'higher', 'score', 'daily', NULL, NULL, '00:00', 2)",
+      "('size-it-up', 'Size it Up', 'higher', 'score', 'daily', NULL, NULL, '00:00', 3)",
+      "('wordle', 'Wordle', 'lower', 'guesses', 'weekly', 4, 6, '00:00', 4)",
+      "('redactle', 'Redactle', 'lower', 'guesses', 'daily', NULL, NULL, '00:00', 5)",
+      "('time-guesser', 'Time Guesser', 'higher', 'score', 'daily', NULL, NULL, '00:00', 6)",
+      "('farflung', 'Farflung', 'higher', 'score', 'daily', NULL, NULL, '00:00', 8)",
+      "('eraly', 'Eraly', 'higher', 'score', 'daily', NULL, NULL, '00:00', 9)",
+      "('fermi', 'Fermi', 'lower', 'score', 'daily', NULL, NULL, '00:00', 10)",
+      "('hivemind', 'Hivemind', 'higher', 'score', 'daily', NULL, NULL, '00:00', 11)",
+      "('noillirk', 'Noillirk', 'higher', 'score', 'daily', NULL, NULL, '00:00', 12)",
     ];
     for (const tuple of tuples) {
       expect(schema).toContain(tuple);

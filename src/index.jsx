@@ -9,15 +9,16 @@ import rootReducer from './store/rootReducer';
 import { getAuthInitialState } from './store/auth.reducer';
 import { NativeProvider } from './utils/NativeContext';
 import { lockDocumentScroll } from './utils/lockDocumentScroll';
+import { applyNightMode } from './utils/nightMode';
+import { AUTH_USER_KEY, cacheGet } from './utils/sessionCache';
 import App from './components/App';
 import './index.css';
 
 lockDocumentScroll();
+applyNightMode(cacheGet(AUTH_USER_KEY)?.night_mode === true);
 
 if (typeof document !== 'undefined' && Capacitor.isNativePlatform()) {
   document.documentElement.classList.add('capacitor-native');
-  document.documentElement.style.backgroundColor = '#FBF9F5';
-  document.body.style.backgroundColor = '#FBF9F5';
   document.getElementById('initial-loader')?.remove();
 }
 

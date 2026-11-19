@@ -1,11 +1,19 @@
 const expressLoader = require('./express');
 const passportLoader = require('./passport');
 const routes = require('../routes');
+const { sendAppleAppSiteAssociation } = require('../wellKnown/appleAppSiteAssociation');
 
 module.exports = async ({ app }) => {
   await expressLoader({ app });
   await passportLoader({ app });
 
+  app.get('/.well-known/apple-app-site-association', sendAppleAppSiteAssociation);
+  app.get('/apple-app-site-association', sendAppleAppSiteAssociation);
+
+  app.use('/api', (req, res, next) => {
+    res.set('Cache-Control', 'private, no-store');
+    next();
+  });
   app.use('/api', routes());
 
   app.use('/api', (err, req, res, next) => {

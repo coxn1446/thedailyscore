@@ -1,4 +1,5 @@
 /** @type {import('tailwindcss').Config} */
+/* Night edition overrides these tokens in src/index.css under html.night. */
 module.exports = {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {

@@ -21,7 +21,7 @@ describe('join auth gate', () => {
     });
   });
 
-  test('sends a guest from an invite link to sign-in and keeps the path', async () => {
+  test('sends a guest from an old invite link to sign-in for the board', async () => {
     const store = configureStore({ reducer: rootReducer });
     render(
       <Provider store={store}>
@@ -33,6 +33,6 @@ describe('join auth gate', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
-    expect(screen.getByTestId('location')).toHaveTextContent('/login?next=%2Fjoin%2Finvite-token');
+    expect(screen.getByTestId('location')).toHaveTextContent('/login?next=%2Fboard');
   });
 });

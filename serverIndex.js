@@ -3,7 +3,8 @@ require('dotenv').config();
 const http = require('http');
 const express = require('express');
 const { initSecrets } = require('./server/config/secrets');
-const { initDb, closeDb } = require('./server/db');
+const { initDb, closeDb, isDbHealthy } = require('./server/db');
+const { runMigrations } = require('./scripts/db-migrate');
 const loaders = require('./server/loaders');
 const socketIO = require('./server/socket');
 
@@ -17,6 +18,7 @@ const startServer = async (attempt = 1) => {
   try {
     await initSecrets();
     await initDb();
+    if (isDbHealthy()) await runMigrations();
 
     const app = express();
     await loaders({ app });

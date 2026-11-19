@@ -86,6 +86,7 @@ const installQuery = () => {
       const user = users.find((row) => row.user_id === params[0]);
       return { rows: user ? [{ ...user }] : [] };
     }
+    if (sql === profileQueries.listUserGames) return { rows: [] };
     if (sql === profileQueries.listStats) {
       const mine = scores.filter((row) => row.user_id === params[0]);
       const buckets = new Map();
@@ -106,9 +107,14 @@ const installQuery = () => {
             rank_basis: bucket.rank_basis,
             played: bucket.rows.length,
             solved_count: bucket.rows.filter((row) => row.solved).length,
+            gave_up: bucket.rows.filter((row) => !row.solved).length,
             average_score: average(scored, 'score'),
             average_guesses: average(solvedGuesses, 'guesses'),
-            best_score: scored.length ? Math.max(...scored.map((row) => row.score)) : null,
+            best_score: scored.length
+              ? (bucket.sort_direction === 'lower'
+                ? Math.min(...scored.map((row) => row.score))
+                : Math.max(...scored.map((row) => row.score)))
+              : null,
             best_guesses: solvedGuesses.length ? Math.min(...solvedGuesses.map((row) => row.guesses)) : null,
           };
         });
@@ -144,6 +150,18 @@ const installQuery = () => {
         email: params[3],
         portrait_url: params[4],
       });
+      return { rows: [{ ...user }] };
+    }
+    if (sql === profileQueries.updateNotifications) {
+      const user = users.find((row) => row.user_id === params[0]);
+      if (!user) return { rows: [] };
+      Object.assign(user, { notifications: params[1] });
+      return { rows: [{ ...user }] };
+    }
+    if (sql === profileQueries.updateNightMode) {
+      const user = users.find((row) => row.user_id === params[0]);
+      if (!user) return { rows: [] };
+      Object.assign(user, { night_mode: params[1] });
       return { rows: [{ ...user }] };
     }
     if (sql === profileQueries.updateAlerts) {
@@ -237,6 +255,7 @@ describe('profileService', () => {
         rank_basis: 'guesses',
         played: 3,
         solved_count: 2,
+        gave_up: 1,
         average_guesses: 3,
         best_guesses: 2,
       },
@@ -270,6 +289,34 @@ describe('profileService', () => {
       status: 409,
       message: 'Handle already in use',
     });
+  });
+
+  test('turns account notifications off', async () => {
+    const user = await profileService.updateNotifications(4, { notifications: false });
+    expect(user.notifications).toBe(false);
+    expect(users.find((row) => row.user_id === 4).notifications).toBe(false);
+  });
+
+  test('saves night mode on the caller', async () => {
+    const user = await profileService.updateNightMode(4, { night_mode: true });
+    expect(user.night_mode).toBe(true);
+    expect(users.find((row) => row.user_id === 4).night_mode).toBe(true);
+    expect(users.find((row) => row.user_id === 8).night_mode).toBeUndefined();
+  });
+
+  test('rejects a night mode value that is not a boolean', async () => {
+    await expect(profileService.updateNightMode(4, { night_mode: 'yes' })).rejects.toMatchObject({
+      status: 400,
+      message: 'Night mode is invalid',
+    });
+  });
+
+  test('refuses to change another reader’s night mode', async () => {
+    await expect(profileService.updateNightMode(4, { night_mode: true, user_id: 8 })).rejects.toMatchObject({
+      status: 403,
+      message: 'Not your profile',
+    });
+    expect(query).not.toHaveBeenCalled();
   });
 
   test('turns the crown alert off', async () => {

@@ -1,4 +1,5 @@
 import { cacheClear } from './utils/sessionCache';
+import { resetSessionClientForTests } from './helpers/sessionClient';
 import '@testing-library/jest-dom';
 import { TextEncoder, TextDecoder } from 'util';
 
@@ -25,12 +26,16 @@ if (typeof window !== 'undefined') {
   });
 }
 
-jest.mock('@capacitor/core', () => ({
-  Capacitor: {
-    isNativePlatform: jest.fn(() => false),
-    getPlatform: jest.fn(() => 'web'),
-  },
-}));
+jest.mock('@capacitor/core', () => {
+  const share = jest.fn(() => Promise.resolve());
+  return {
+    Capacitor: {
+      isNativePlatform: jest.fn(() => false),
+      getPlatform: jest.fn(() => 'web'),
+    },
+    registerPlugin: jest.fn(() => ({ share })),
+  };
+});
 
 jest.mock('@capacitor/browser', () => ({
   Browser: {
@@ -63,6 +68,55 @@ jest.mock('socket.io-client', () => ({
   })),
 }));
 
+class FetchBackedXHR {
+  constructor() {
+    this.upload = {};
+    this.status = 0;
+    this.responseText = '';
+    this.withCredentials = false;
+    this.onload = null;
+    this.onerror = null;
+  }
+
+  open(method, url) {
+    this.method = method;
+    this.url = url;
+  }
+
+  send(body) {
+    const run = async () => {
+      this.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 });
+      try {
+        const res = await global.fetch(this.url, {
+          method: this.method,
+          body,
+          credentials: this.withCredentials ? 'include' : 'same-origin',
+        });
+        let text = '{}';
+        if (res && typeof res.text === 'function') text = await res.text();
+        else if (res && typeof res.json === 'function') text = JSON.stringify(await res.json());
+        this.status = Number.isInteger(res?.status) ? res.status : (res?.ok === false ? 500 : 200);
+        this.responseText = text;
+        this.upload.onprogress?.({ lengthComputable: true, loaded: 100, total: 100 });
+        this.onload?.();
+      } catch {
+        this.onerror?.();
+      }
+    };
+    run();
+  }
+}
+
+window.XMLHttpRequest = FetchBackedXHR;
+global.XMLHttpRequest = FetchBackedXHR;
+
 afterEach(() => {
   cacheClear();
+  resetSessionClientForTests();
+  document.documentElement.classList.remove('night');
+  try {
+    sessionStorage.clear();
+  } catch {
+    /* ignore */
+  }
 });

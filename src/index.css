@@ -117,6 +117,26 @@
   }
 }
 
+html {
+  color-scheme: light;
+}
+
+/* Night edition of the same tokens. See documentation/BRAND_GUIDELINES.md. */
+html.night {
+  color-scheme: dark;
+  --color-background: #111111;
+  --color-surface: #111111;
+  --color-inset: #1a1916;
+  --color-module: #22211e;
+  --color-primary: #fbf9f5;
+  --color-on-primary: #111111;
+  --color-secondary: #c45c5c;
+  --color-muted: #b0aca4;
+  --color-border: #2c2a26;
+  --color-border-strong: #322f2b;
+  --color-error: #e07070;
+}
+
 *,
 *::before,
 *::after {
@@ -126,6 +146,80 @@
 
 .portrait {
   border-radius: 9999px;
+}
+
+.upload-meter {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: var(--spacing-space-sm);
+  border: 0;
+  background: var(--color-border);
+  color: var(--color-primary);
+}
+
+.upload-meter::-webkit-progress-bar {
+  background: var(--color-border);
+}
+
+.upload-meter::-webkit-progress-value {
+  background: var(--color-primary);
+}
+
+.upload-meter::-moz-progress-bar {
+  background: var(--color-primary);
+}
+
+.photo-stage {
+  touch-action: none;
+}
+
+.photo-zoom {
+  transform: translate(var(--photo-x, 0px), var(--photo-y, 0px)) scale(var(--photo-scale, 1));
+  transform-origin: center center;
+}
+
+.chart-pill {
+  border-radius: 9999px;
+}
+
+html.night .semantle-logo {
+  filter: brightness(0) invert(1);
+}
+
+html.night [data-story='ink'] .semantle-logo {
+  filter: none;
+}
+
+/* Story cards keep their own ground. Night mode must not swap Paper and Ink. */
+.story-paper {
+  background: #fbf9f5;
+  color: #111111;
+  border-color: #111111;
+}
+
+.story-paper .story-kicker {
+  color: #9e2a2b;
+}
+
+.story-ink {
+  background: #111111;
+  color: #fbf9f5;
+  border-color: #fbf9f5;
+}
+
+.story-ink .story-kicker {
+  color: #c45c5c;
+}
+
+.story-carmine {
+  background: #9e2a2b;
+  color: #fbf9f5;
+  border-color: #fbf9f5;
+}
+
+.story-carmine .story-kicker {
+  color: #fbf9f5;
 }
 
 html,
@@ -181,10 +275,16 @@ html:not(.capacitor-native) #root {
     overscroll-behavior: none;
   }
 
-  .overflow-y-auto {
+  .overflow-y-auto,
+  .overflow-x-auto {
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
   }
+}
+
+html.capacitor-native .overflow-x-auto,
+html.capacitor-native .overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
 }
 
 html.capacitor-native {
@@ -196,6 +296,46 @@ html.capacitor-native body,
 html.capacitor-native #root {
   height: 100%;
   overflow: hidden;
+}
+
+.brand-check {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  border: 1px solid var(--color-primary);
+  background-color: var(--color-background);
+  display: inline-grid;
+  place-content: center;
+}
+
+.brand-check:checked {
+  background-color: var(--color-primary);
+}
+
+.brand-check:checked::after {
+  content: "";
+  width: 0.25rem;
+  height: 0.5rem;
+  border: solid var(--color-on-primary);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translateY(-1px);
+}
+
+.brand-check:disabled {
+  border-color: var(--color-border-strong);
+  background-color: var(--color-inset);
+}
+
+.brand-check:disabled:checked {
+  background-color: var(--color-muted);
+}
+
+.brand-check:focus-visible {
+  outline: 1px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),

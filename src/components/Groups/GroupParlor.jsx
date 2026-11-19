@@ -13,6 +13,7 @@ import {
 import { fetchParlor, postParlorMessage, reactToMessage } from '../../helpers/parlorHelpers';
 import { getSocket } from '../../helpers/socketHelpers';
 import { useKeyboardInputClearance } from '../../hooks/useKeyboardInputClearance';
+import { composerBottom, keepKeyboardForPointerSelect } from '../../utils/keyboardInputClearance';
 
 const linkClass = 'text-primary underline decoration-primary underline-offset-2 hover:text-secondary hover:decoration-secondary';
 const COMPOSER_DOCK_DELAY_MS = 250;
@@ -32,6 +33,35 @@ const stamp = (value) => {
   return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(date);
 };
 
+const dayKey = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+};
+
+const dayLabel = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const today = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  if (dayKey(value) === today) return 'Today';
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
+};
+
+const Portrait = ({ message }) => {
+  const initial = (message.display_name || message.handle || 'R').trim().charAt(0).toUpperCase();
+  if (message.portrait_url) {
+    return <img src={message.portrait_url} alt="" className="portrait h-8 w-8 shrink-0 border border-primary object-cover" />;
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className="portrait flex h-8 w-8 shrink-0 items-center justify-center border border-primary bg-background font-masthead text-body-md text-primary"
+    >
+      {initial}
+    </span>
+  );
+};
+
 const GroupParlor = ({ groupId, gameSlug, onSeen, showTitle = true }) => {
   const [messages, setMessages] = useState([]);
   const [before, setBefore] = useState(null);
@@ -43,6 +73,8 @@ const GroupParlor = ({ groupId, gameSlug, onSeen, showTitle = true }) => {
   const listRef = useRef(null);
   const inputRef = useRef(null);
   const formRef = useRef(null);
+  const sendingRef = useRef(false);
+  const restoreFocus = useRef(false);
   const keyboard = useKeyboardInputClearance({ scrollFocusedField: false });
   const lifted = keyboard.enabled && keyboard.keyboardFieldFocused;
   const [docked, setDocked] = useState(false);
@@ -101,11 +133,19 @@ const GroupParlor = ({ groupId, gameSlug, onSeen, showTitle = true }) => {
     };
   }, [groupId, gameSlug, onSeen]);
 
-  useEffect(() => {
+  const scrollToEnd = () => {
     const node = listRef.current;
     if (!node) return;
     node.scrollTop = node.scrollHeight;
+  };
+
+  useEffect(() => {
+    scrollToEnd();
   }, [messages, loading]);
+
+  useEffect(() => {
+    if (docked) scrollToEnd();
+  }, [docked]);
 
   useEffect(() => {
     if (!lifted) {
@@ -128,16 +168,10 @@ const GroupParlor = ({ groupId, gameSlug, onSeen, showTitle = true }) => {
     }
     const place = () => {
       const height = form.offsetHeight;
-      const viewport = window.visualViewport;
-      if (viewport) {
-        const top = Math.max(0, viewport.offsetTop + viewport.height - height);
-        form.style.top = `${top}px`;
-        form.style.bottom = 'auto';
-      } else {
-        form.style.top = 'auto';
-        form.style.bottom = '0px';
-      }
-      if (list) list.style.paddingBottom = `${height}px`;
+      const bottom = composerBottom(form, keyboard.keyboardClearancePx);
+      form.style.top = 'auto';
+      form.style.bottom = `${bottom}px`;
+      if (list) list.style.paddingBottom = `${height + bottom}px`;
     };
     place();
     const viewport = window.visualViewport;
@@ -147,7 +181,7 @@ const GroupParlor = ({ groupId, gameSlug, onSeen, showTitle = true }) => {
       viewport?.removeEventListener('resize', place);
       viewport?.removeEventListener('scroll', place);
     };
-  }, [docked, body, error]);
+  }, [docked, body, error, keyboard.keyboardClearancePx]);
 
   const loadEarlier = async () => {
     if (!before) return;
@@ -160,10 +194,16 @@ const GroupParlor = ({ groupId, gameSlug, onSeen, showTitle = true }) => {
     setBefore(data.before || null);
   };
 
+  const keepComposerFocus = () => {
+    inputRef.current?.focus();
+  };
+
   const send = async (event) => {
     event.preventDefault();
     const text = body.trim();
     if (!text || sending) return;
+    sendingRef.current = true;
+    keepComposerFocus();
     setSending(true);
     setError('');
     try {
@@ -178,10 +218,17 @@ const GroupParlor = ({ groupId, gameSlug, onSeen, showTitle = true }) => {
     } catch (err) {
       setError(err.message || 'Could not send');
     } finally {
+      restoreFocus.current = true;
       setSending(false);
-      inputRef.current?.focus();
     }
   };
+
+  useLayoutEffect(() => {
+    if (!restoreFocus.current) return;
+    keepComposerFocus();
+    restoreFocus.current = false;
+    sendingRef.current = false;
+  });
 
   const react = async (messageId, kind) => {
     setOpenReaction(null);
@@ -216,64 +263,87 @@ const GroupParlor = ({ groupId, gameSlug, onSeen, showTitle = true }) => {
         ) : null}
         {loading ? null : messages.length ? (
           <ol>
-            {messages.map((message) => (
+            {messages.map((message, index) => {
+              const day = dayKey(message.created_at);
+              const previous = index > 0 ? dayKey(messages[index - 1].created_at) : '';
+              const showDay = day && day !== previous;
+              if (message.kind === 'standings') {
+                return (
+                  <li key={message.message_id} className="border-b border-border py-space-sm">
+                    {showDay ? (
+                      <p className="mb-space-sm text-center font-mono text-caption uppercase text-muted">{dayLabel(message.created_at)}</p>
+                    ) : null}
+                    <p className="whitespace-pre-wrap text-center font-mono text-caption text-primary">{message.body}</p>
+                  </li>
+                );
+              }
+              return (
               <li key={message.message_id} className="border-b border-border py-space-sm">
-                <p className="font-sans text-body-md text-primary">
-                  <span className="font-bold">{message.display_name || message.handle}</span>
-                  {stamp(message.created_at) ? (
-                    <span className="ml-space-sm font-mono text-caption text-muted">{stamp(message.created_at)}</span>
-                  ) : null}
-                </p>
-                <div className="mt-space-xs flex items-start gap-space-xs">
-                  <p className="min-w-0 whitespace-pre-wrap font-sans text-body-md text-primary">{message.body}</p>
-                  <button
-                    type="button"
-                    aria-label="Add reaction"
-                    aria-expanded={openReaction === message.message_id}
-                    onClick={() => setOpenReaction((current) => (current === message.message_id ? null : message.message_id))}
-                    className="shrink-0 text-muted hover:text-primary"
-                  >
-                    <SmileyMark />
-                  </button>
-                </div>
-                <div className="mt-space-xs flex flex-wrap items-center gap-space-xs">
-                  {(message.reactions || []).map((reaction) => {
-                    const spec = REACTIONS.find((item) => item.kind === reaction.kind);
-                    const Icon = spec?.Icon;
-                    return (
-                      <button
-                        key={reaction.kind}
-                        type="button"
-                        aria-pressed={reaction.mine}
-                        aria-label={spec?.label || reaction.kind}
-                        onClick={() => react(message.message_id, reaction.kind)}
-                        className={`inline-flex items-center gap-space-xs border px-space-xs font-mono text-caption ${reaction.mine ? 'border-secondary text-secondary' : 'border-border text-primary'}`}
-                      >
-                        {Icon ? <Icon /> : reaction.kind} {reaction.count}
-                      </button>
-                    );
-                  })}
-                </div>
-                {openReaction === message.message_id ? (
-                  <div className="mt-space-xs flex flex-wrap gap-space-xs">
-                    {REACTIONS.map((reaction) => {
-                      const Icon = reaction.Icon;
-                      return (
-                        <button
-                          key={reaction.kind}
-                          type="button"
-                          aria-label={reaction.label}
-                          onClick={() => react(message.message_id, reaction.kind)}
-                          className="inline-flex border border-primary px-space-sm py-space-xs text-primary"
-                        >
-                          <Icon className="h-5 w-5" />
-                        </button>
-                      );
-                    })}
-                  </div>
+                {showDay ? (
+                  <p className="mb-space-sm text-center font-mono text-caption uppercase text-muted">{dayLabel(message.created_at)}</p>
                 ) : null}
+                <div className="flex items-start gap-space-sm">
+                  <Portrait message={message} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-sans text-body-md text-primary">
+                      <span className="font-bold">{message.display_name || message.handle}</span>
+                      {stamp(message.created_at) ? (
+                        <span className="ml-space-sm font-mono text-caption text-muted">{stamp(message.created_at)}</span>
+                      ) : null}
+                    </p>
+                    <div className="mt-space-xs flex items-start gap-space-xs">
+                      <p className="min-w-0 whitespace-pre-wrap font-sans text-body-md text-primary">{message.body}</p>
+                      <button
+                        type="button"
+                        aria-label="Add reaction"
+                        aria-expanded={openReaction === message.message_id}
+                        onClick={() => setOpenReaction((current) => (current === message.message_id ? null : message.message_id))}
+                        className="shrink-0 text-muted hover:text-primary"
+                      >
+                        <SmileyMark />
+                      </button>
+                    </div>
+                    <div className="mt-space-xs flex flex-wrap items-center gap-space-xs">
+                      {(message.reactions || []).map((reaction) => {
+                        const spec = REACTIONS.find((item) => item.kind === reaction.kind);
+                        const Icon = spec?.Icon;
+                        return (
+                          <button
+                            key={reaction.kind}
+                            type="button"
+                            aria-pressed={reaction.mine}
+                            aria-label={spec?.label || reaction.kind}
+                            onClick={() => react(message.message_id, reaction.kind)}
+                            className={`inline-flex items-center gap-space-xs border px-space-xs font-mono text-caption ${reaction.mine ? 'border-secondary text-secondary' : 'border-border text-primary'}`}
+                          >
+                            {Icon ? <Icon /> : reaction.kind} {reaction.count}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {openReaction === message.message_id ? (
+                      <div className="mt-space-xs flex flex-wrap gap-space-xs">
+                        {REACTIONS.map((reaction) => {
+                          const Icon = reaction.Icon;
+                          return (
+                            <button
+                              key={reaction.kind}
+                              type="button"
+                              aria-label={reaction.label}
+                              onClick={() => react(message.message_id, reaction.kind)}
+                              className="inline-flex border border-primary px-space-sm py-space-xs text-primary"
+                            >
+                              <Icon className="h-5 w-5" />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               </li>
-            ))}
+              );
+            })}
           </ol>
         ) : (
           <h3 className="mt-space-lg font-masthead text-headline-md text-primary">The parlor is quiet.</h3>
@@ -286,7 +356,14 @@ const GroupParlor = ({ groupId, gameSlug, onSeen, showTitle = true }) => {
         className={`${docked ? 'fixed inset-x-0 z-50 px-margin' : 'shrink-0'} border-t border-border bg-background pt-space-sm`}
         onPointerDown={keyboard.onPointerDown}
         onFocus={keyboard.onFocusIn}
-        onBlur={keyboard.onFocusOut}
+        onBlur={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget)) return;
+          if (sendingRef.current) {
+            keepComposerFocus();
+            return;
+          }
+          keyboard.onFocusOut(event);
+        }}
       >
         <label htmlFor={`parlor-message-${groupId}`} className="sr-only">Message</label>
         <textarea
@@ -294,14 +371,16 @@ const GroupParlor = ({ groupId, gameSlug, onSeen, showTitle = true }) => {
           ref={inputRef}
           value={body}
           onChange={(event) => setBody(event.target.value)}
+          onFocus={scrollToEnd}
           placeholder="Message"
           rows={2}
           className={fieldClass}
         />
         <button
           type="submit"
-          disabled={sending || !body.trim()}
-          onPointerDown={(event) => event.preventDefault()}
+          disabled={!body.trim()}
+          onPointerDown={keepKeyboardForPointerSelect}
+          onMouseDown={keepKeyboardForPointerSelect}
           className={`${inkButtonClass} mt-space-sm w-full justify-center`}
         >
           Send
