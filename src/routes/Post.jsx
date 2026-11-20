@@ -10,15 +10,23 @@ const Post = () => {
   const navigate = useNavigate();
   const user = useSelector(selectUser);
   const [post, setPost] = useState(null);
+  const [viewerScore, setViewerScore] = useState(null);
+  const [dayAverage, setDayAverage] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
     setPost(null);
+    setViewerScore(null);
+    setDayAverage(null);
     setError('');
     fetchPost(scoreId)
       .then((data) => {
-        if (!cancelled) setPost(data.post || null);
+        if (!cancelled) {
+          setPost(data.post || null);
+          setViewerScore(data.viewer_score || null);
+          setDayAverage(data.day_average || null);
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err.message || 'Score not found');
@@ -46,6 +54,9 @@ const Post = () => {
             post={post}
             viewerId={user?.user_id}
             detail
+            viewer={user}
+            viewerScore={viewerScore}
+            dayAverage={dayAverage}
             onChange={setPost}
           />
         </div>

@@ -40,10 +40,23 @@ describe('App desks and sign-in', () => {
     });
   });
 
-  test('sends a guest from / to sign-in', async () => {
+  test('opens the desk for a guest', async () => {
+    global.fetch = jest.fn(async (url) => {
+      const path = String(url);
+      if (path.includes('/api/auth/config')) {
+        return { ok: true, json: async () => ({ googleClientId: null, appleClientId: null }) };
+      }
+      if (path.includes('/api/feed') || path.includes('/api/scores/today')) {
+        return { ok: true, status: 200, json: async () => ({ posts: [], scores: [] }) };
+      }
+      return { ok: false, status: 401, json: async () => ({ error: 'Not authenticated' }) };
+    });
     renderApp('/');
-    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
-    expect(screen.queryByTestId('masthead')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('desk-home')).toBeInTheDocument();
+    expect(screen.getByTestId('masthead')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Log In' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Select Your Games' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument();
   });
 
   test('asks the server before opening the desk for a saved reader', async () => {
@@ -78,8 +91,9 @@ describe('App desks and sign-in', () => {
     reload.mockClear();
     renderApp('/');
 
-    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
-    expect(screen.queryByTestId('desk-home')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('desk-home')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Log In' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument();
     expect(reload).not.toHaveBeenCalled();
     expect(cacheGet(AUTH_USER_KEY)).toBeUndefined();
     reload.mockRestore();
@@ -220,7 +234,7 @@ describe('App desks and sign-in', () => {
     await user.click(screen.getByRole('button', { name: 'Profile' }));
     await user.click(screen.getByRole('button', { name: 'Sign Out' }));
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Guest' })).toBeInTheDocument();
       expect(document.documentElement).not.toHaveClass('night');
     });
   });
@@ -242,8 +256,9 @@ describe('App desks and sign-in', () => {
     await user.click(screen.getByRole('button', { name: 'Profile' }));
     await user.click(screen.getByRole('button', { name: 'Sign Out' }));
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Guest' })).toBeInTheDocument();
     });
+    expect(screen.getAllByRole('link', { name: 'Log In' }).length).toBeGreaterThan(0);
   });
 
   test('confirming delete profile opens sign-in with account deleted', async () => {

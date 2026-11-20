@@ -1,11 +1,22 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
+import { useSelector } from 'react-redux';
+import toast from 'react-hot-toast';
 import PasteDesk from '../components/Home/PasteDesk';
 import ScoreFeed from '../components/Home/ScoreFeed';
+import { inkButtonClass } from '../components/Auth/AuthPageLayout';
 import { GearMark } from '../components/Brand/Marks';
 import GamePicker from '../components/Games/GamePicker';
 import { GAME_LINKS } from '../helpers/gameCatalog';
+import {
+  guestHomeGames,
+  guestImportUserId,
+  markGuestImportTried,
+} from '../helpers/guestCache';
+import { importGuestIntoAccount } from '../helpers/guestImport';
 import { fetchMyGames } from '../helpers/profileHelpers';
+import { selectUser } from '../store/auth.reducer';
 import { bindPullRefresh, PULL_REFRESH_DISTANCE } from '../utils/pullRefresh';
 
 const HOME_GAMES_KEY = 'ds:home-games';
@@ -15,8 +26,8 @@ const cachedHomeGames = () => {
   try {
     const slugs = JSON.parse(sessionStorage.getItem(HOME_GAMES_KEY) || 'null');
     if (!Array.isArray(slugs) || !slugs.length) return null;
-    const wanted = new Set(slugs);
-    const games = GAME_LINKS.filter((game) => wanted.has(game.slug));
+    const bySlug = new Map(GAME_LINKS.map((game) => [game.slug, game]));
+    const games = slugs.map((slug) => bySlug.get(slug)).filter(Boolean);
     return games.length ? games : null;
   } catch {
     return null;
@@ -34,8 +45,8 @@ const rememberHomeGames = (games) => {
 const gamesFromPayload = (data) => {
   const listed = Array.isArray(data?.games) ? data.games : [];
   if (!listed.length) return GAME_LINKS;
-  const enabled = new Set(listed.filter((game) => game.enabled).map((game) => game.slug));
-  const games = GAME_LINKS.filter((game) => enabled.has(game.slug));
+  const bySlug = new Map(GAME_LINKS.map((game) => [game.slug, game]));
+  const games = listed.filter((game) => game.enabled).map((game) => bySlug.get(game.slug)).filter(Boolean);
   rememberHomeGames(games);
   return games;
 };
@@ -51,6 +62,7 @@ const openGame = async (event) => {
 };
 
 const Home = () => {
+  const user = useSelector(selectUser);
   const [games, setGames] = useState(cachedHomeGames);
   const [gamesOpen, setGamesOpen] = useState(false);
   const [feedRevision, setFeedRevision] = useState(0);
@@ -95,6 +107,20 @@ const Home = () => {
   }, [nativeIosFeed]);
 
   useEffect(() => {
+    const toTop = () => {
+      const node = scrollerRef.current;
+      if (node) node.scrollTop = 0;
+      try {
+        sessionStorage.setItem(HOME_SCROLL_KEY, '0');
+      } catch {
+        /* private mode */
+      }
+    };
+    window.addEventListener('ds:home-top', toTop);
+    return () => window.removeEventListener('ds:home-top', toTop);
+  }, []);
+
+  useEffect(() => {
     const node = scrollerRef.current;
     if (!node) return undefined;
     const save = () => {
@@ -112,6 +138,15 @@ const Home = () => {
   }, []);
 
   useEffect(() => {
+    if (user?.user_id) return undefined;
+    setGames(guestHomeGames());
+    const loadGames = () => setGames(guestHomeGames());
+    window.addEventListener('ds:games', loadGames);
+    return () => window.removeEventListener('ds:games', loadGames);
+  }, [user?.user_id]);
+
+  useEffect(() => {
+    if (!user?.user_id) return undefined;
     let cancelled = false;
     const loadGames = () => {
       fetchMyGames()
@@ -128,19 +163,38 @@ const Home = () => {
       cancelled = true;
       window.removeEventListener('ds:games', loadGames);
     };
-  }, []);
+  }, [user?.user_id]);
+
+  useEffect(() => {
+    if (!user?.user_id || guestImportUserId() !== String(user.user_id)) return undefined;
+    markGuestImportTried(user.user_id);
+    let cancelled = false;
+    importGuestIntoAccount()
+      .catch((err) => {
+        if (!cancelled) toast.error(err.message || 'Scores stayed on this device');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.user_id]);
 
   return (
     <div className="relative flex h-full min-h-0 w-full flex-1 flex-col">
       <div className="hidden justify-end lg:flex">
-        <button
-          type="button"
-          aria-label="Select Your Games"
-          onClick={() => setGamesOpen(true)}
-          className="border border-primary p-space-sm text-primary hover:bg-primary hover:text-on-primary"
-        >
-          <GearMark />
-        </button>
+        {user ? (
+          <button
+            type="button"
+            aria-label="Select Your Games"
+            onClick={() => setGamesOpen(true)}
+            className="border border-primary p-space-sm text-primary hover:bg-primary hover:text-on-primary"
+          >
+            <GearMark />
+          </button>
+        ) : (
+          <Link to="/login" className={inkButtonClass}>
+            Log In
+          </Link>
+        )}
       </div>
       <div ref={scrollerRef} data-testid="home-scroller" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div className="mx-auto w-full lg:max-w-measure">

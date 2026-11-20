@@ -27,6 +27,7 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
   - alert_new_member (BOOLEAN NOT NULL DEFAULT FALSE) — push when someone else joins a group
   - notifications (BOOLEAN NOT NULL DEFAULT TRUE) — account switch for every push
   - night_mode (BOOLEAN NOT NULL DEFAULT FALSE) — account switch for the ink edition
+  - feed_scope (VARCHAR(16) NOT NULL DEFAULT 'everyone') — `everyone` or `friends` for the Home feed
   - is_admin (BOOLEAN NOT NULL DEFAULT FALSE) — Admin nav and the game-request desk
   - suspended (BOOLEAN NOT NULL DEFAULT FALSE)
   - tos_accepted_version (VARCHAR(32)) — the Terms version the reader accepted. Null until they accept the current terms
@@ -49,9 +50,10 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
 - **Checks**:
   - `users_handle_format` requires `^[a-z0-9_]{3,24}$` when handle is set
   - `users_dispatch_mode_check` allows `preview` or `auto`
+  - `users_feed_scope_check` allows `everyone` or `friends`
 - **Foreign Keys**: None
 - **Triggers**: `users_set_updated_at` via `set_updated_at()`
-- **Last Modified**: 2026-11-16
+- **Last Modified**: 2026-11-19
 
 ### games
 
@@ -385,6 +387,7 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
   - user_id (INTEGER NOT NULL)
   - game_id (INTEGER NOT NULL)
   - enabled (BOOLEAN NOT NULL DEFAULT TRUE)
+  - sort_order (INTEGER) — the reader’s order. Null keeps the catalog order
 - **Indexes**:
   - user_games_pkey — (user_id, game_id)
   - user_games_user_idx — a reader’s selection
@@ -393,7 +396,49 @@ On shared Cloud SQL, set `search_path` to `qa` or `prod` before applying `server
   - user_id → users(user_id) ON DELETE CASCADE
   - game_id → games(game_id) ON DELETE CASCADE
 - **Triggers**: None
-- **Last Modified**: 2026-11-16
+- **Last Modified**: 2026-11-19
+
+### notifications
+
+- **Purpose**: A like, a comment, or a friend request addressed to one account. Opening Notifications marks the rows read.
+- **Columns**:
+  - notification_id (SERIAL PRIMARY KEY)
+  - user_id (INTEGER NOT NULL) — the reader who receives it
+  - actor_id (INTEGER) — the reader who liked, commented, or requested
+  - kind (VARCHAR(16) NOT NULL) — `like`, `comment`, or `friend_request`
+  - score_id (INTEGER) — the score for a like or a comment
+  - friendship_id (INTEGER) — the request
+  - read_at (TIMESTAMPTZ) — null until the list is opened
+  - created_at (TIMESTAMPTZ NOT NULL DEFAULT NOW())
+- **Indexes**:
+  - notifications_user_created_idx — a reader’s list, newest first
+  - notifications_unread_idx — unread rows for one reader
+- **Checks**: `notifications_kind_check` allows `like`, `comment`, or `friend_request`
+- **Foreign Keys**:
+  - user_id → users(user_id) ON DELETE CASCADE
+  - actor_id → users(user_id) ON DELETE SET NULL
+  - score_id → scores(score_id) ON DELETE CASCADE
+  - friendship_id → friendships(friendship_id) ON DELETE CASCADE
+- **Triggers**: None
+- **Last Modified**: 2026-11-19
+
+### bug_reports
+
+- **Purpose**: An error a reader sent from an unrecognized paste. Admins read them with game requests.
+- **Columns**:
+  - bug_report_id (SERIAL PRIMARY KEY)
+  - user_id (INTEGER NOT NULL)
+  - message (TEXT NOT NULL) — the error
+  - detail (TEXT) — the paste
+  - seen (BOOLEAN NOT NULL DEFAULT FALSE)
+  - created_at (TIMESTAMPTZ NOT NULL DEFAULT NOW())
+- **Indexes**:
+  - bug_reports_user_idx — reports from one reader
+- **Checks**: None
+- **Foreign Keys**:
+  - user_id → users(user_id) ON DELETE CASCADE
+- **Triggers**: None
+- **Last Modified**: 2026-11-19
 
 ### session
 
@@ -486,6 +531,13 @@ Created by `connect-pg-simple` when the pool is healthy (`createTableIfMissing`)
 
 - Recomputed `played_on` for numbered Size It Up scores. #1 is 10 August 2026, so #100 is 17 November 2026. A puzzle number stored as YYYYMMDD keeps its printed day
 - **Last Modified**: 2026-11-17
+
+### 032_reader_desk.sql
+
+- Added `feed_scope` on `users`
+- Added `sort_order` on `user_games`
+- Created `notifications` and `bug_reports`
+- **Last Modified**: 2026-11-19
 
 ### 031_noillirk.sql
 

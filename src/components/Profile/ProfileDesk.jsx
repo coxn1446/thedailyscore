@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { useDispatch, useSelector } from 'react-redux';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { fieldClass, inkButtonClass, labelClass, ruleButtonClass } from '../Auth/AuthPageLayout';
 import { logout } from '../../helpers/authHelpers';
@@ -24,10 +24,10 @@ import LegalLinks from '../Legal/LegalLinks';
 import GameArchive from './GameArchive';
 import GameLogo from '../Brand/GameLogo';
 import GamePicker from '../Games/GamePicker';
-import FriendDesk from '../Board/FriendDesk';
 import PublicProfile from './PublicProfile';
 import ScoreChart from './ScoreChart';
-import { fetchFriends } from '../../helpers/friendHelpers';
+import { guestNight, guestStats, setGuestNight } from '../../helpers/guestCache';
+import { applyNightMode } from '../../utils/nightMode';
 import { clearUser, selectUser, setUser } from '../../store/auth.reducer';
 
 const tabClass = (active) =>
@@ -73,6 +73,7 @@ const SlideToggle = ({ on, label, disabled, onClick }) => (
 );
 
 const SettingsDialog = ({
+  account = true,
   notificationsOn,
   notifyPending,
   onNotifications,
@@ -108,12 +109,14 @@ const SettingsDialog = ({
           </button>
         </div>
         <div className="mt-space-lg flex flex-col gap-space-sm">
-          <SlideToggle
-            label="Notifications"
-            on={notificationsOn}
-            disabled={notifyPending}
-            onClick={onNotifications}
-          />
+          {account ? (
+            <SlideToggle
+              label="Notifications"
+              on={notificationsOn}
+              disabled={notifyPending}
+              onClick={onNotifications}
+            />
+          ) : null}
           <SlideToggle
             label="Night mode"
             on={nightOn}
@@ -125,12 +128,16 @@ const SettingsDialog = ({
           <button type="button" onClick={onGames} className={`${ruleButtonClass} w-44 justify-center`}>
             Select Your Games
           </button>
-          <button type="button" onClick={onExport} className={`${ruleButtonClass} w-44 justify-center`}>
-            Export CSV
-          </button>
-          <button type="button" onClick={onDelete} className={`${ruleButtonClass} w-44 justify-center`}>
-            Delete Profile
-          </button>
+          {account ? (
+            <>
+              <button type="button" onClick={onExport} className={`${ruleButtonClass} w-44 justify-center`}>
+                Export CSV
+              </button>
+              <button type="button" onClick={onDelete} className={`${ruleButtonClass} w-44 justify-center`}>
+                Delete Profile
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
     </div>
@@ -197,15 +204,22 @@ const ProfileDesk = () => {
   const [deleting, setDeleting] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
-  const [incomingCount, setIncomingCount] = useState(0);
   const [notifyPending, setNotifyPending] = useState(false);
   const [nightPending, setNightPending] = useState(false);
   const portraitGeneration = useRef(0);
   const native = Capacitor.isNativePlatform();
+  const guest = !user?.user_id;
+  const [guestNightOn, setGuestNightOn] = useState(() => guestNight());
   const notificationsOn = user?.notifications !== false;
-  const nightOn = user?.night_mode === true;
+  const nightOn = guest ? guestNightOn : user?.night_mode === true;
 
   useEffect(() => {
+    if (guest) {
+      setStats(guestStats(span));
+      const refresh = () => setStats(guestStats(span));
+      window.addEventListener(SCORE_POSTED, refresh);
+      return () => window.removeEventListener(SCORE_POSTED, refresh);
+    }
     let cancelled = false;
     const load = () => {
       const seenGeneration = portraitGeneration.current;
@@ -234,9 +248,10 @@ const ProfileDesk = () => {
       cancelled = true;
       window.removeEventListener(SCORE_POSTED, load);
     };
-  }, [dispatch, span]);
+  }, [dispatch, span, guest]);
 
   useEffect(() => {
+    if (guest) return undefined;
     let cancelled = false;
     fetchArchivedGroups()
       .then((data) => {
@@ -248,7 +263,7 @@ const ProfileDesk = () => {
     return () => {
       cancelled = true;
     };
-  }, [dispatch]);
+  }, [dispatch, guest]);
 
   const handlePortrait = async (file) => {
     if (!file) return;
@@ -351,6 +366,13 @@ const ProfileDesk = () => {
   };
 
   const handleNightMode = async () => {
+    if (guest) {
+      const next = !guestNightOn;
+      setGuestNight(next);
+      setGuestNightOn(next);
+      applyNightMode(next);
+      return;
+    }
     if (nightPending || !user) return;
     const next = !nightOn;
     const previous = user;
@@ -391,26 +413,6 @@ const ProfileDesk = () => {
   const initial = (displayName || handle || 'R').trim().charAt(0).toUpperCase();
   const viewingOther = Boolean(routeHandle) && routeHandle !== user?.handle;
 
-  useEffect(() => {
-    if (viewingOther) return undefined;
-    let cancelled = false;
-    const load = () => {
-      fetchFriends()
-        .then((data) => {
-          if (!cancelled) setIncomingCount((data.incoming || []).length);
-        })
-        .catch(() => {
-          if (!cancelled) setIncomingCount(0);
-        });
-    };
-    load();
-    window.addEventListener('ds:friends', load);
-    return () => {
-      cancelled = true;
-      window.removeEventListener('ds:friends', load);
-    };
-  }, [viewingOther]);
-
   if (viewingOther) {
     return (
       <section data-testid="desk-profile" className="max-w-measure border-t-2 border-primary pt-space-md">
@@ -424,21 +426,13 @@ const ProfileDesk = () => {
 
   return (
     <section data-testid="desk-profile" className="max-w-measure border-t-2 border-primary pt-space-md">
-      <h1 className="font-masthead text-headline-lg text-primary text-balance">{displayName}</h1>
+      <h1 className="font-masthead text-headline-lg text-primary text-balance">{guest ? 'Guest' : displayName}</h1>
       <nav aria-label="Profile sections" className="mt-space-lg flex gap-space-lg">
         <button type="button" aria-pressed={tab === 'stats'} onClick={() => setTab('stats')} className={tabClass(tab === 'stats')}>
           Stats
         </button>
         <button type="button" aria-pressed={tab === 'archive'} onClick={() => setTab('archive')} className={tabClass(tab === 'archive')}>
           Game Archive
-        </button>
-        <button type="button" aria-pressed={tab === 'requests'} onClick={() => setTab('requests')} className={`${tabClass(tab === 'requests')} relative`}>
-          Friendship requests
-          {incomingCount > 0 ? (
-            <span className="absolute right-0 top-0 bg-secondary px-space-xs font-mono text-caption text-on-primary">
-              {incomingCount > 99 ? '99' : incomingCount}
-            </span>
-          ) : null}
         </button>
         <button type="button" aria-pressed={tab === 'profile'} onClick={() => setTab('profile')} className={tabClass(tab === 'profile')}>
           Profile
@@ -507,9 +501,18 @@ const ProfileDesk = () => {
 
       {tab === 'archive' ? <GameArchive timeZone={user?.timezone} /> : null}
 
-      {tab === 'requests' ? <FriendDesk /> : null}
+      {tab === 'profile' && guest ? (
+        <div className="mt-space-lg flex flex-col items-center gap-space-sm">
+          <Link to="/login" className={`${inkButtonClass} w-44 justify-center`}>Log In</Link>
+          <Link to="/register" className={`${ruleButtonClass} w-44 justify-center`}>Create account</Link>
+          <button type="button" onClick={() => setSettingsOpen(true)} className={`${ruleButtonClass} w-44 justify-center`}>
+            Settings
+          </button>
+          <LegalLinks />
+        </div>
+      ) : null}
 
-      {tab === 'profile' ? (
+      {tab === 'profile' && !guest ? (
         <>
           <form onSubmit={handleSave} className="mt-space-lg space-y-space-md">
             <div className="flex items-center gap-space-md">
@@ -634,6 +637,7 @@ const ProfileDesk = () => {
 
       {settingsOpen ? (
         <SettingsDialog
+          account={!guest}
           notificationsOn={notificationsOn}
           notifyPending={notifyPending}
           onNotifications={handleNotifications}

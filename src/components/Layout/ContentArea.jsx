@@ -26,8 +26,13 @@ const ContentArea = ({ children }) => {
   const isLoading = useSelector(selectAuthLoading);
   const user = useSelector(selectUser);
   const { pathname } = useLocation();
-  const showChrome = isAuthenticated && !needsHandle(user);
   const legal = pathname === '/terms' || pathname === '/privacy' || pathname === '/account-deletion' || pathname === '/support';
+  const desk = pathname === '/'
+    || pathname === '/board'
+    || pathname === '/profile'
+    || pathname.startsWith('/profile/')
+    || pathname.startsWith('/post/');
+  const showChrome = !needsHandle(user) && (isAuthenticated || desk);
 
   if (isLoading) {
     return (

@@ -53,9 +53,14 @@
         function savedNight() {
           try {
             var raw = localStorage.getItem('ds:auth:user');
-            if (!raw) return false;
-            var user = JSON.parse(raw);
-            return !!(user && user.night_mode === true);
+            if (raw) {
+              var user = JSON.parse(raw);
+              return !!(user && user.night_mode === true);
+            }
+            var guest = localStorage.getItem('ds:guest');
+            if (!guest) return false;
+            var file = JSON.parse(guest);
+            return !!(file && file.night_mode === true);
           } catch (e) {
             return false;
           }

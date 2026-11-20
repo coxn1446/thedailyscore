@@ -1,4 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { signedOutLoginTarget } from '../../helpers/accountDeleted';
+import { selectUser } from '../../store/auth.reducer';
 import { fieldClass, inkButtonClass, ruleButtonClass } from '../Auth/AuthPageLayout';
 import {
   acceptFriend,
@@ -24,6 +28,9 @@ const FriendTable = ({ people, renderAction }) => (
 );
 
 const FriendDesk = ({ onChange }) => {
+  const user = useSelector(selectUser);
+  const navigate = useNavigate();
+  const location = useLocation();
   const [desk, setDesk] = useState(null);
   const [handle, setHandle] = useState('');
   const [results, setResults] = useState([]);
@@ -39,7 +46,12 @@ const FriendDesk = ({ onChange }) => {
       .catch((err) => setError(err.message || 'Could not load friends.'));
   };
 
+  const askToSignIn = () => {
+    navigate(signedOutLoginTarget(location.pathname, location.search).to);
+  };
+
   useEffect(() => {
+    if (!user?.user_id) return undefined;
     let cancelled = false;
     fetchFriends()
       .then((data) => {
@@ -51,11 +63,11 @@ const FriendDesk = ({ onChange }) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [user?.user_id]);
 
   useEffect(() => {
     const queryText = handle.trim().replace(/^@+/, '');
-    if (!queryText) {
+    if (!user?.user_id || !queryText) {
       setResults([]);
       return undefined;
     }
@@ -70,7 +82,7 @@ const FriendDesk = ({ onChange }) => {
     return () => {
       cancelled = true;
     };
-  }, [handle]);
+  }, [handle, user?.user_id]);
 
   const run = async (work) => {
     if (pending) return;
@@ -119,11 +131,17 @@ const FriendDesk = ({ onChange }) => {
               <button
                 type="button"
                 disabled={pending || person.relation === 'friends' || person.relation === 'outgoing'}
-                onClick={() => run(() => (
-                  person.relation === 'incoming'
-                    ? acceptFriend(person.friendship_id)
-                    : requestFriend(person.handle)
-                ))}
+                onClick={() => {
+                  if (!user?.user_id) {
+                    askToSignIn();
+                    return;
+                  }
+                  run(() => (
+                    person.relation === 'incoming'
+                      ? acceptFriend(person.friendship_id)
+                      : requestFriend(person.handle)
+                  ));
+                }}
                 className={person.relation === 'none' || person.relation === 'incoming' ? inkButtonClass : ruleButtonClass}
               >
                 {requestLabel(person)}

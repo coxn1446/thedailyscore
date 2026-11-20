@@ -9,6 +9,7 @@ jest.mock('../../server/services/scoreService', () => ({
   archive: jest.fn(),
   removeScore: jest.fn(),
   updateShares: jest.fn(),
+  importPastes: jest.fn(),
 }));
 
 const scoreService = require('../../server/services/scoreService');
@@ -48,13 +49,29 @@ describe('score routes', () => {
     jest.clearAllMocks();
   });
 
-  test('rejects guests before preview or confirm', async () => {
-    const preview = await invoke('POST', '/preview', { body: { paste: 'Wordle 1 1/6' } });
+  test('previews a paste for a guest and still rejects confirm', async () => {
+    scoreService.preview.mockResolvedValue({ game: { slug: 'wordle' } });
+    const preview = await invoke('POST', '/preview', {
+      body: { paste: 'Wordle 1 1/6', timezone: 'America/New_York' },
+    });
     const posted = await invoke('POST', '/', { body: { paste: 'Wordle 1 1/6' } });
-    expect(preview.status).toBe(401);
+    expect(preview.status).toBe(200);
+    expect(scoreService.preview).toHaveBeenCalledWith(null, 'Wordle 1 1/6', expect.any(Date), 'America/New_York');
     expect(posted.status).toBe(401);
-    expect(scoreService.preview).not.toHaveBeenCalled();
     expect(scoreService.confirm).not.toHaveBeenCalled();
+  });
+
+  test('imports cached pastes for the signed-in reader', async () => {
+    scoreService.importPastes.mockResolvedValue({ saved: 1, skipped: 1 });
+    const imported = await invoke('POST', '/import', {
+      authenticated: true,
+      body: { pastes: ['Krillion #74'] },
+    });
+    expect(imported.status).toBe(200);
+    expect(imported.body).toEqual({ saved: 1, skipped: 1 });
+    expect(scoreService.importPastes).toHaveBeenCalledWith(4, ['Krillion #74'], 'UTC');
+    const guest = await invoke('POST', '/import', { body: { pastes: ['Krillion #74'] } });
+    expect(guest.status).toBe(401);
   });
 
   test('previews and confirms the raw paste for the signed-in reader', async () => {

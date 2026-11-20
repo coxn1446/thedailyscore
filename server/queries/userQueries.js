@@ -13,6 +13,7 @@ const USER_FIELDS = `
   alert_new_member,
   notifications,
   night_mode,
+  feed_scope,
   is_admin,
   suspended,
   tos_accepted_version,

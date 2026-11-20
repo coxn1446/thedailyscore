@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { fetchGameRequests, markRequestsSeen, notifyAdminSeen } from '../helpers/adminHelpers';
+import { fetchBugReports, fetchGameRequests, markRequestsSeen, notifyAdminSeen } from '../helpers/adminHelpers';
 import { selectUser } from '../store/auth.reducer';
 
 const formatWhen = (value) => {
@@ -14,16 +14,20 @@ const formatWhen = (value) => {
 const Admin = () => {
   const user = useSelector(selectUser);
   const [requests, setRequests] = useState(null);
+  const [reports, setReports] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!user?.is_admin) return undefined;
     let cancelled = false;
-    fetchGameRequests()
-      .then(async (data) => {
+    Promise.all([fetchGameRequests(), fetchBugReports()])
+      .then(async ([games, bugs]) => {
         if (cancelled) return;
-        setRequests(data.requests || []);
-        if ((data.requests || []).some((row) => !row.seen)) {
+        const filed = games.requests || [];
+        const sent = bugs.reports || [];
+        setRequests(filed);
+        setReports(sent);
+        if (filed.some((row) => !row.seen) || sent.some((row) => !row.seen)) {
           await markRequestsSeen().catch(() => {});
           notifyAdminSeen();
         }
@@ -60,6 +64,33 @@ const Admin = () => {
                 <td className="py-space-sm font-sans text-body-md text-primary">
                   {row.game_name}
                   {row.note ? <span className="block font-mono text-caption text-muted">{row.note}</span> : null}
+                </td>
+                <td className="py-space-sm font-sans text-body-md text-primary">{row.display_name || row.handle}</td>
+                <td className="py-space-sm text-right font-mono text-caption text-muted">{formatWhen(row.created_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+      <h2 className="mt-space-xl font-masthead text-headline-md text-primary">Bug reports</h2>
+      {reports && !reports.length ? (
+        <p className="mt-space-lg font-masthead text-headline-md text-primary">No reports.</p>
+      ) : null}
+      {reports?.length ? (
+        <table className="mt-space-lg w-full">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="py-space-sm text-left font-sans text-kicker uppercase tracking-kicker text-muted">Error</th>
+              <th className="py-space-sm text-left font-sans text-kicker uppercase tracking-kicker text-muted">From</th>
+              <th className="py-space-sm text-right font-sans text-kicker uppercase tracking-kicker text-muted">Filed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {reports.map((row) => (
+              <tr key={row.bug_report_id} className="border-b border-border">
+                <td className="py-space-sm font-sans text-body-md text-primary">
+                  {row.message}
+                  {row.detail ? <span className="block whitespace-pre-wrap font-mono text-caption text-muted">{row.detail}</span> : null}
                 </td>
                 <td className="py-space-sm font-sans text-body-md text-primary">{row.display_name || row.handle}</td>
                 <td className="py-space-sm text-right font-mono text-caption text-muted">{formatWhen(row.created_at)}</td>

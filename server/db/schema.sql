@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
   alert_new_member BOOLEAN NOT NULL DEFAULT FALSE,
   notifications BOOLEAN NOT NULL DEFAULT TRUE,
   night_mode BOOLEAN NOT NULL DEFAULT FALSE,
+  feed_scope VARCHAR(16) NOT NULL DEFAULT 'everyone',
   is_admin BOOLEAN NOT NULL DEFAULT FALSE,
   suspended BOOLEAN NOT NULL DEFAULT FALSE,
   tos_accepted_version VARCHAR(32),
@@ -35,7 +36,8 @@ CREATE TABLE IF NOT EXISTS users (
   CONSTRAINT users_handle_format CHECK (
     handle IS NULL OR handle ~ '^[a-z0-9_]{3,24}$'
   ),
-  CONSTRAINT users_dispatch_mode_check CHECK (dispatch_mode IN ('preview', 'auto'))
+  CONSTRAINT users_dispatch_mode_check CHECK (dispatch_mode IN ('preview', 'auto')),
+  CONSTRAINT users_feed_scope_check CHECK (feed_scope IN ('everyone', 'friends'))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_google_id_uidx
@@ -358,7 +360,39 @@ CREATE TABLE IF NOT EXISTS user_games (
   user_id INTEGER NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
   game_id INTEGER NOT NULL REFERENCES games (game_id) ON DELETE CASCADE,
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  sort_order INTEGER,
   PRIMARY KEY (user_id, game_id)
 );
 
 CREATE INDEX IF NOT EXISTS user_games_user_idx ON user_games (user_id);
+
+-- A like, a comment, or a friend request for one reader.
+CREATE TABLE IF NOT EXISTS notifications (
+  notification_id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+  actor_id INTEGER REFERENCES users (user_id) ON DELETE SET NULL,
+  kind VARCHAR(16) NOT NULL,
+  score_id INTEGER REFERENCES scores (score_id) ON DELETE CASCADE,
+  friendship_id INTEGER REFERENCES friendships (friendship_id) ON DELETE CASCADE,
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT notifications_kind_check CHECK (kind IN ('like', 'comment', 'friend_request'))
+);
+
+CREATE INDEX IF NOT EXISTS notifications_user_created_idx
+  ON notifications (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS notifications_unread_idx
+  ON notifications (user_id)
+  WHERE read_at IS NULL;
+
+-- An error a reader sent to the admin desk.
+CREATE TABLE IF NOT EXISTS bug_reports (
+  bug_report_id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  detail TEXT,
+  seen BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS bug_reports_user_idx ON bug_reports (user_id);

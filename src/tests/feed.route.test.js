@@ -45,13 +45,24 @@ describe('feed routes', () => {
     jest.clearAllMocks();
   });
 
-  test('rejects a guest', async () => {
+  test('lets a guest read the feed and comments', async () => {
+    feedService.list.mockResolvedValue({ posts: [] });
+    feedService.comments.mockResolvedValue({ comments: [] });
+    feedService.get.mockResolvedValue({ post: { score_id: 3 } });
     const listed = await invoke('GET', '/');
+    const one = await invoke('GET', '/3');
+    const comments = await invoke('GET', '/3/comments');
     const liked = await invoke('POST', '/3/like');
-    expect(listed.status).toBe(401);
+    const posted = await invoke('POST', '/3/comments', { body: { body: 'sharp' } });
+    expect(listed.status).toBe(200);
+    expect(one.status).toBe(200);
+    expect(comments.status).toBe(200);
+    expect(feedService.list).toHaveBeenCalledWith(null);
+    expect(feedService.get).toHaveBeenCalledWith(null, 3);
     expect(liked.status).toBe(401);
-    expect(feedService.list).not.toHaveBeenCalled();
+    expect(posted.status).toBe(401);
     expect(feedService.setLike).not.toHaveBeenCalled();
+    expect(feedService.addComment).not.toHaveBeenCalled();
   });
 
   test('lists the feed and toggles a like for the caller', async () => {

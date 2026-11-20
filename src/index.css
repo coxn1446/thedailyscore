@@ -183,6 +183,11 @@ html.night {
   border-radius: 9999px;
 }
 
+/* Ink wordmark stays on paper in night mode (same ground as launch / story). */
+.wordmark-plate {
+  background: #fbf9f5;
+}
+
 html.night .semantle-logo {
   filter: brightness(0) invert(1);
 }

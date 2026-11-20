@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const requireAuth = require('../middleware/requireAuth');
 const adminService = require('../services/adminService');
+const bugService = require('../services/bugService');
 
 const requireAdmin = (req, res, next) => {
   if (req.user?.is_admin !== true) {
@@ -23,6 +24,14 @@ module.exports = () => {
   router.post('/requests/seen', requireAuth, requireAdmin, async (req, res, next) => {
     try {
       return res.json(await adminService.markSeen());
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  router.get('/bugs', requireAuth, requireAdmin, async (req, res, next) => {
+    try {
+      return res.json(await bugService.list());
     } catch (err) {
       return next(err);
     }

@@ -51,7 +51,10 @@ describe('profileHelpers', () => {
       });
 
     await exportScores();
-    expect(global.fetch).toHaveBeenNthCalledWith(1, '/api/profile/export', { credentials: 'include' });
+    expect(global.fetch).toHaveBeenNthCalledWith(1, '/api/profile/export', {
+      cache: 'no-store',
+      credentials: 'include',
+    });
     await deleteAccount();
     expect(global.fetch).toHaveBeenNthCalledWith(
       2,

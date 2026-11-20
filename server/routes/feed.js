@@ -15,9 +15,10 @@ const scoreIdOf = (value) => {
 module.exports = () => {
   const router = Router();
 
-  router.get('/', requireAuth, async (req, res, next) => {
+  router.get('/', async (req, res, next) => {
     try {
-      const payload = await feedService.list(req.user.user_id);
+      const viewerId = req.isAuthenticated?.() && req.user ? req.user.user_id : null;
+      const payload = await feedService.list(viewerId);
       return res.json(payload);
     } catch (err) {
       return next(err);
@@ -42,16 +43,17 @@ module.exports = () => {
     }
   });
 
-  router.get('/:scoreId', requireAuth, async (req, res, next) => {
+  router.get('/:scoreId', async (req, res, next) => {
     try {
-      const payload = await feedService.get(req.user.user_id, scoreIdOf(req.params.scoreId));
+      const viewerId = req.isAuthenticated?.() && req.user ? req.user.user_id : null;
+      const payload = await feedService.get(viewerId, scoreIdOf(req.params.scoreId));
       return res.json(payload);
     } catch (err) {
       return next(err);
     }
   });
 
-  router.get('/:scoreId/comments', requireAuth, async (req, res, next) => {
+  router.get('/:scoreId/comments', async (req, res, next) => {
     try {
       const payload = await feedService.comments(scoreIdOf(req.params.scoreId));
       return res.json(payload);

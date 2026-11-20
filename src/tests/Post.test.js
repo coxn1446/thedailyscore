@@ -85,7 +85,7 @@ describe('Post', () => {
     renderPost();
     expect(await screen.findByText('355')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Krillion/ })).toHaveAttribute('href', 'https://krillion.io');
+    expect(screen.getByRole('link', { name: /Krillion/ })).toHaveAttribute('href', '/board?game=krillion&period=today');
     expect(screen.getByLabelText('Comment')).toBeInTheDocument();
     await user.type(screen.getByLabelText('Comment'), 'sharp');
     await user.click(screen.getByRole('button', { name: 'Post' }));
@@ -157,6 +157,44 @@ describe('Post', () => {
     expect(dialog.querySelector('img')).toHaveClass('max-h-full', 'max-w-full');
     await user.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog', { name: 'Picture' })).not.toBeInTheDocument();
+  });
+
+  test('shows your score and share grid beside theirs', async () => {
+    global.fetch.mockImplementation(async (url) => {
+      if (String(url) === '/api/feed/3') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            post,
+            viewer_score: {
+              score_id: 9,
+              score: 400,
+              guesses: null,
+              solved: true,
+              snippet: '🦑',
+              game: post.game,
+            },
+          }),
+        };
+      }
+      if (String(url).endsWith('/comments')) return { ok: true, status: 200, json: async () => ({ comments: [] }) };
+      return { ok: false, status: 500, json: async () => ({ error: 'Request failed' }) };
+    });
+    renderPost();
+    expect(await screen.findByRole('columnheader', { name: 'User' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Result' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Score' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Bea' })).toHaveAttribute('href', '/profile/bea');
+    expect(screen.getByRole('link', { name: 'ada' })).toHaveAttribute('href', '/profile');
+    const mark = screen.getByRole('img', { name: 'The Daily Score' });
+    expect(mark).toBeInTheDocument();
+    expect(mark.parentElement).toHaveClass('wordmark-plate');
+    expect(screen.getByText('(AVG)')).toBeInTheDocument();
+    expect(screen.getByText('355')).toBeInTheDocument();
+    expect(screen.getByText('400')).toBeInTheDocument();
+    expect(screen.getByText('🐟')).toBeInTheDocument();
+    expect(screen.getByText('🦑')).toBeInTheDocument();
   });
 
   test('reports a missing score', async () => {

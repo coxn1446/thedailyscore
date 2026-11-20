@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { acceptFriend, notifyFriendsChanged, requestFriend } from '../../helpers/friendHelpers';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { signedOutLoginTarget } from '../../helpers/accountDeleted';
+import { acceptFriend, notifyFriendsChanged, removeFriend, requestFriend } from '../../helpers/friendHelpers';
 import { fetchPlayer } from '../../helpers/profileHelpers';
+import { selectUser } from '../../store/auth.reducer';
 import { ruleButtonClass } from '../Auth/AuthPageLayout';
 import GameLogo from '../Brand/GameLogo';
 
@@ -13,6 +17,9 @@ const formatStat = (game) => {
 };
 
 const PublicProfile = ({ handle }) => {
+  const user = useSelector(selectUser);
+  const navigate = useNavigate();
+  const location = useLocation();
   const [player, setPlayer] = useState(null);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
@@ -32,14 +39,20 @@ const PublicProfile = ({ handle }) => {
 
   const follow = async () => {
     if (!player || pending) return;
+    if (!user?.user_id) {
+      navigate(signedOutLoginTarget(location.pathname, location.search).to);
+      return;
+    }
     setPending(true);
     try {
       if (player.relation?.status === 'incoming') await acceptFriend(player.relation.friendship_id);
-      else await requestFriend(player.user.handle);
+      else if (player.relation?.status === 'outgoing' || player.relation?.status === 'friends') {
+        await removeFriend(player.relation.friendship_id);
+      } else await requestFriend(player.user.handle);
       notifyFriendsChanged();
       load();
     } catch (err) {
-      setError(err.message || 'Could not follow.');
+      setError(err.message || 'Could not add friend.');
     } finally {
       setPending(false);
     }
@@ -51,7 +64,22 @@ const PublicProfile = ({ handle }) => {
   if (!player) return null;
   const name = player.user.display_name || player.user.handle;
   const status = player.relation?.status;
-  const label = status === 'friends' ? 'Friends' : status === 'outgoing' ? 'Requested' : status === 'incoming' ? 'Accept' : 'Follow';
+  const label = status === 'friends' ? 'Unfriend' : status === 'outgoing' ? 'Cancel request' : status === 'incoming' ? 'Accept' : 'Add Friend';
+  const yours = Array.isArray(player.viewer_stats) ? player.viewer_stats : null;
+  const mine = new Map((yours || []).map((game) => [game.slug, game]));
+  const rows = (player.stats || []).map((game) => ({
+    slug: game.slug,
+    name: game.name,
+    theirs: game,
+    mine: mine.get(game.slug) || null,
+  }));
+  if (yours) {
+    for (const game of yours) {
+      if (!rows.some((row) => row.slug === game.slug)) {
+        rows.push({ slug: game.slug, name: game.name, theirs: null, mine: game });
+      }
+    }
+  }
 
   return (
     <section>
@@ -71,7 +99,7 @@ const PublicProfile = ({ handle }) => {
       {status !== 'self' ? (
         <button
           type="button"
-          disabled={pending || status === 'friends' || status === 'outgoing'}
+          disabled={pending}
           onClick={follow}
           className={`${ruleButtonClass} mt-space-lg`}
         >
@@ -79,20 +107,24 @@ const PublicProfile = ({ handle }) => {
         </button>
       ) : null}
       {error ? <p role="alert" className="mt-space-sm font-sans text-body-md text-error">{error}</p> : null}
-      {player.stats?.length ? (
+      {rows.length ? (
         <div className="mt-space-lg">
-          <div className="grid grid-cols-2 gap-space-md border-b border-border py-space-sm">
+          <div className={`grid gap-space-md border-b border-border py-space-sm ${yours ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <span className="font-sans text-kicker uppercase tracking-kicker text-muted">Game</span>
             <span className="text-right font-sans text-kicker uppercase tracking-kicker text-muted">Best Score</span>
+            {yours ? <span className="text-right font-sans text-kicker uppercase tracking-kicker text-muted">You</span> : null}
           </div>
           <ul>
-            {player.stats.map((game) => (
-              <li key={game.slug} className="grid grid-cols-2 items-center gap-space-md border-b border-border py-space-sm">
+            {rows.map((row) => (
+              <li key={row.slug} className={`grid items-center gap-space-md border-b border-border py-space-sm ${yours ? 'grid-cols-3' : 'grid-cols-2'}`}>
                 <span className="flex items-center gap-space-sm font-sans text-body-md text-primary">
-                  <GameLogo slug={game.slug} />
-                  {game.name}
+                  <GameLogo slug={row.slug} />
+                  {row.name}
                 </span>
-                <span className="text-right font-mono text-body-md text-primary">{formatStat(game)}</span>
+                <span className="text-right font-mono text-body-md text-primary">{row.theirs ? formatStat(row.theirs) : '—'}</span>
+                {yours ? (
+                  <span className="text-right font-mono text-body-md text-primary">{row.mine ? formatStat(row.mine) : '—'}</span>
+                ) : null}
               </li>
             ))}
           </ul>

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Link } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import toast from 'react-hot-toast';
 import { inkButtonClass } from '../Auth/AuthPageLayout';
 import { CopyMark } from '../Brand/Marks';
@@ -9,7 +10,11 @@ import StoryShare from '../Share/StoryShare';
 import instagramLogo from '../../assets/instagram.png';
 import GameLogo from '../Brand/GameLogo';
 import GameMenu from './GameMenu';
+import { fileGuestScore, guestTodayPayload } from '../../helpers/guestCache';
+import { clientTimezone } from '../../helpers/identity';
 import { SCORE_POSTED, fetchTodayScores, formatResult, formatTodayCopy, postScore, previewScore } from '../../helpers/scoreHelpers';
+import { selectIsAuthenticated } from '../../store/auth.reducer';
+import { reportBug } from '../../helpers/bugHelpers';
 import { copyText } from '../../utils/copyText';
 
 const PASTE_KEY = 'ds:pending-paste';
@@ -43,15 +48,25 @@ const ResultBlock = ({ result }) => (
   </div>
 );
 
-const PasteError = ({ message }) => {
+const PasteError = ({ message, signedIn, onReport }) => {
   if (!message) return null;
   if (message === 'Unrecognized result') {
     return (
       <p role="alert" className="mt-space-sm font-sans text-body-md text-error">
         Game not recognized.{' '}
-        <Link to="/request-game" className={linkClass}>
-          Submit a request?
+        <Link to={signedIn ? '/request-game' : '/login?next=/request-game'} className={linkClass}>
+          Submit a request for a new game?
         </Link>
+        {' '}
+        {signedIn ? (
+          <button type="button" onClick={onReport} className={linkClass}>
+            Report a bug
+          </button>
+        ) : (
+          <Link to="/login?next=/" className={linkClass}>
+            Report a bug
+          </Link>
+        )}
       </p>
     );
   }
@@ -63,6 +78,7 @@ const PasteError = ({ message }) => {
 };
 
 const PasteDesk = ({ onPosted, games = [], onOpenGame }) => {
+  const signedIn = useSelector(selectIsAuthenticated);
   const [phase, setPhase] = useState('empty');
   const [paste, setPaste] = useState(savedPaste);
   const [preview, setPreview] = useState(null);
@@ -76,17 +92,23 @@ const PasteDesk = ({ onPosted, games = [], onOpenGame }) => {
     todayCopyRef.current = data?.scores?.length ? formatTodayCopy(data) : null;
   };
 
-  const loadTodayCopy = () => fetchTodayScores().then((data) => {
-    rememberToday(data);
-    return todayCopyRef.current;
-  });
+  const loadTodayCopy = () => {
+    if (!signedIn) {
+      rememberToday(guestTodayPayload());
+      return Promise.resolve(todayCopyRef.current);
+    }
+    return fetchTodayScores().then((data) => {
+      rememberToday(data);
+      return todayCopyRef.current;
+    });
+  };
 
   const submit = async () => {
     if (pending) return;
     setPending(true);
     setError('');
     try {
-      const data = await previewScore(paste);
+      const data = await previewScore(paste, clientTimezone());
       setPreview(data);
       setPhase('preview');
     } catch (err) {
@@ -103,7 +125,7 @@ const PasteDesk = ({ onPosted, games = [], onOpenGame }) => {
     setPending(true);
     setError('');
     try {
-      const saved = await postScore(paste, []);
+      const saved = signedIn ? await postScore(paste, []) : fileGuestScore(paste, preview);
       const personal = saved?.personal || {};
       if (personal.best_all) toast.success('Best all time.');
       else if (personal.best_week) toast.success('Best this week.');
@@ -113,7 +135,7 @@ const PasteDesk = ({ onPosted, games = [], onOpenGame }) => {
       setPaste('');
       setPreview(null);
       setPhase('empty');
-      if (saved?.global_rank != null) toast.success(`Rank ${saved.global_rank}`);
+      if (signedIn && saved?.global_rank != null) toast.success(`Rank ${saved.global_rank}`);
       window.dispatchEvent(new Event(SCORE_POSTED));
       if (onPosted) onPosted(saved);
     } catch (err) {
@@ -146,7 +168,7 @@ const PasteDesk = ({ onPosted, games = [], onOpenGame }) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [signedIn]);
 
   useEffect(() => {
     const onKey = (event) => {
@@ -161,6 +183,19 @@ const PasteDesk = ({ onPosted, games = [], onOpenGame }) => {
   const edit = () => {
     setPhase('empty');
     setError('');
+  };
+
+  const report = async () => {
+    if (pending) return;
+    setPending(true);
+    try {
+      await reportBug(error || 'Unrecognized result', paste);
+      toast.success('Sent');
+    } catch (err) {
+      toast.error(err.message || 'Could not send');
+    } finally {
+      setPending(false);
+    }
   };
 
   const copyToday = async () => {
@@ -216,7 +251,7 @@ const PasteDesk = ({ onPosted, games = [], onOpenGame }) => {
               placeholder="copy and paste your score from any daily game here."
               className="w-full resize-none bg-background px-space-sm pt-space-sm font-mono text-base text-primary outline-none"
             />
-            <div className="flex items-center gap-space-sm border-t border-border px-space-sm py-space-sm">
+            <div className="flex items-center gap-space-lg border-t border-border px-space-sm py-space-sm">
               <GameMenu games={games} onOpen={onOpenGame || (() => {})} />
               <button
                 type="button"
@@ -242,7 +277,7 @@ const PasteDesk = ({ onPosted, games = [], onOpenGame }) => {
               </button>
             </div>
           </div>
-          <PasteError message={error} />
+          <PasteError message={error} signedIn={signedIn} onReport={report} />
         </form>
       ) : null}
 

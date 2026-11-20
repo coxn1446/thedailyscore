@@ -10,6 +10,7 @@ jest.mock('../../server/db', () => ({
 
 const { query } = require('../../server/db');
 const friendQueries = require('../../server/queries/friendQueries');
+const notificationQueries = require('../../server/queries/notificationQueries');
 const userQueries = require('../../server/queries/userQueries');
 const pushService = require('../../server/services/pushService');
 const friendService = require('../../server/services/friendService');
@@ -72,6 +73,7 @@ const install = () => {
     }
     if (sql === friendQueries.listForUser) return { rows: [] };
     if (sql === friendQueries.listAcceptedIds) return { rows: [] };
+    if (sql === notificationQueries.insertNotification) return { rows: [{ notification_id: 1 }] };
     throw new Error(`unexpected sql ${String(sql).slice(0, 40)}`);
   });
 };
@@ -92,6 +94,10 @@ describe('friendService', () => {
       addresseeId: 8,
       actor: expect.objectContaining({ handle: 'ada' }),
     });
+    expect(query).toHaveBeenCalledWith(
+      notificationQueries.insertNotification,
+      [8, 4, 'friend_request', null, sent.friendship_id]
+    );
 
     await expect(friendService.request(4, 'bea')).rejects.toMatchObject({
       status: 409,

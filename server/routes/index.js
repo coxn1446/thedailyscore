@@ -12,6 +12,8 @@ const internalRoutes = require('./internal');
 const friendRoutes = require('./friends');
 const boardRoutes = require('./board');
 const adminRoutes = require('./admin');
+const notificationRoutes = require('./notifications');
+const bugRoutes = require('./bugs');
 const { isDbHealthy } = require('../db');
 
 module.exports = () => {
@@ -53,6 +55,8 @@ module.exports = () => {
   router.use('/friends', friendRoutes());
   router.use('/board', boardRoutes());
   router.use('/admin', adminRoutes());
+  router.use('/notifications', notificationRoutes());
+  router.use('/bugs', bugRoutes());
 
   return router;
 };

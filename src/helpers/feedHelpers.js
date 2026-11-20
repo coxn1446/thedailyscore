@@ -4,6 +4,9 @@ const request = (url, options = {}) => apiJson(url, options);
 
 export const fetchFeed = () => request('/api/feed');
 
+export const saveFeedScope = (scope) =>
+  request('/api/profile', { method: 'PATCH', body: JSON.stringify({ feed_scope: scope }) });
+
 export const fetchPost = (scoreId) => request(`/api/feed/${scoreId}`);
 
 export const likeScore = (scoreId) => request(`/api/feed/${scoreId}/like`, { method: 'POST' });

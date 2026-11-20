@@ -1,8 +1,11 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useSelector } from 'react-redux';
 import GameLogo from '../Brand/GameLogo';
+import { guestArchiveRows, guestEnabledSlugs, guestGameOrder } from '../../helpers/guestCache';
 import { SCORE_POSTED, fetchArchive } from '../../helpers/scoreHelpers';
 import { fetchMyGames } from '../../helpers/profileHelpers';
-import { buildScoreLines } from '../../helpers/scoreChart';
+import { buildScoreLines, orderSeries } from '../../helpers/scoreChart';
+import { selectUser } from '../../store/auth.reducer';
 
 const SERIES = {
   'map-tap': { stroke: 'stroke-primary', fill: 'fill-primary', dash: undefined },
@@ -23,6 +26,7 @@ const PAD_TOP = 16;
 const PAD_BOTTOM = 28;
 
 const ScoreChart = () => {
+  const user = useSelector(selectUser);
   const [chart, setChart] = useState(null);
   const [hidden, setHidden] = useState(() => new Set());
   const [active, setActive] = useState(null);
@@ -33,12 +37,23 @@ const ScoreChart = () => {
   useEffect(() => {
     let cancelled = false;
     const load = () => {
+      if (!user?.user_id) {
+        const enabled = guestEnabledSlugs();
+        const scores = guestArchiveRows().filter((row) => !enabled || enabled.has(row.game?.slug));
+        if (!cancelled) {
+          const built = buildScoreLines(scores);
+          setChart({ ...built, series: orderSeries(built.series, guestGameOrder()) });
+        }
+        return;
+      }
       Promise.all([fetchArchive(), fetchMyGames().catch(() => ({ games: [] }))])
         .then(([archive, games]) => {
           if (cancelled) return;
           const enabled = new Set((games.games || []).filter((game) => game.enabled).map((game) => game.slug));
           const scores = (archive.scores || []).filter((row) => !enabled.size || enabled.has(row.game?.slug));
-          setChart(buildScoreLines(scores));
+          const built = buildScoreLines(scores);
+          const order = (games.games || []).map((game) => game.slug);
+          setChart({ ...built, series: orderSeries(built.series, order) });
         })
         .catch(() => {
           if (!cancelled) setChart({ series: [], start: '', end: '' });
@@ -50,7 +65,7 @@ const ScoreChart = () => {
       cancelled = true;
       window.removeEventListener(SCORE_POSTED, load);
     };
-  }, []);
+  }, [user?.user_id]);
 
   useLayoutEffect(() => {
     if (!active || !nameRef.current || !detailRef.current || !chart) {

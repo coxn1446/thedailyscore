@@ -282,11 +282,12 @@ const listLoggedTodayScores = `
   FROM scores s
   JOIN users u ON u.user_id = s.user_id
   JOIN games ga ON ga.game_id = s.game_id
+  LEFT JOIN user_games ug ON ug.user_id = s.user_id AND ug.game_id = ga.game_id
   WHERE s.user_id = $1
     AND (s.updated_at AT TIME ZONE u.timezone) >= date_trunc('day', NOW() AT TIME ZONE u.timezone)
     AND (s.updated_at AT TIME ZONE u.timezone)
       < date_trunc('day', NOW() AT TIME ZONE u.timezone) + INTERVAL '1 day'
-  ORDER BY ga.sort_order ASC, s.score_id ASC
+  ORDER BY COALESCE(ug.sort_order, ga.sort_order) ASC, ga.sort_order ASC, s.score_id ASC
 `;
 
 const countLoggedToday = `
@@ -325,7 +326,8 @@ const listPersonalBests = `
       s.updated_at ASC
     LIMIT 1
   ) best ON TRUE
-  ORDER BY ga.sort_order ASC, ga.game_id ASC
+  LEFT JOIN user_games ug ON ug.user_id = $1 AND ug.game_id = ga.game_id
+  ORDER BY COALESCE(ug.sort_order, ga.sort_order) ASC, ga.game_id ASC
 `;
 
 const listArchive = `

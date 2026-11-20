@@ -10,12 +10,14 @@ import { getAuthInitialState } from './store/auth.reducer';
 import { NativeProvider } from './utils/NativeContext';
 import { lockDocumentScroll } from './utils/lockDocumentScroll';
 import { applyNightMode } from './utils/nightMode';
+import { guestNight } from './helpers/guestCache';
 import { AUTH_USER_KEY, cacheGet } from './utils/sessionCache';
 import App from './components/App';
 import './index.css';
 
 lockDocumentScroll();
-applyNightMode(cacheGet(AUTH_USER_KEY)?.night_mode === true);
+const savedAccount = cacheGet(AUTH_USER_KEY);
+applyNightMode(savedAccount ? savedAccount.night_mode === true : guestNight());
 
 if (typeof document !== 'undefined' && Capacitor.isNativePlatform()) {
   document.documentElement.classList.add('capacitor-native');

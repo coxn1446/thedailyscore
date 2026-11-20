@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { selectUser } from '../../store/auth.reducer';
+import { selectIsAuthenticated, selectUser } from '../../store/auth.reducer';
+import { clientTimezone } from '../../helpers/identity';
 import { editionDateline } from '../../utils/edition';
+import { inkButtonClass } from '../Auth/AuthPageLayout';
 import { GearMark } from '../Brand/Marks';
 import GamePicker from '../Games/GamePicker';
 import { DeskNav } from '../Nav/DeskNav';
 
 const Masthead = () => {
   const user = useSelector(selectUser);
-  const zone = user?.timezone;
+  const isAuthenticated = useSelector(selectIsAuthenticated);
+  const zone = user?.timezone || clientTimezone();
   const [gamesOpen, setGamesOpen] = useState(false);
 
   return (
@@ -23,14 +27,20 @@ const Masthead = () => {
           <p className="hidden font-sans text-kicker uppercase tracking-kicker text-primary md:block">
             YOUR DAILY GAMES. ONE SCORE.
           </p>
-          <button
-            type="button"
-            aria-label="Select Your Games"
-            onClick={() => setGamesOpen(true)}
-            className="p-space-xs text-primary lg:hidden"
-          >
-            <GearMark />
-          </button>
+          {isAuthenticated ? (
+            <button
+              type="button"
+              aria-label="Select Your Games"
+              onClick={() => setGamesOpen(true)}
+              className="p-space-xs text-primary lg:hidden"
+            >
+              <GearMark />
+            </button>
+          ) : (
+            <Link to="/login" className={`${inkButtonClass} lg:hidden`}>
+              Log In
+            </Link>
+          )}
         </div>
       </div>
       <div className="hidden px-margin py-space-sm md:px-margin-desktop lg:block">

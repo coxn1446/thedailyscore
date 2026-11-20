@@ -8,6 +8,24 @@ export const HomeMark = ({ className = 'h-5 w-5' }) => (
   </svg>
 );
 
+export const AlertMark = ({ className = 'h-5 w-5' }) => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className={frame(className)} fill="none">
+    <path d="M6 16.5V10a6 6 0 0 1 12 0v6.5H6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="miter" />
+    <path d="M10 18.5a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.5" />
+  </svg>
+);
+
+export const GripMark = ({ className = 'h-5 w-5' }) => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className={frame(className)} fill="currentColor">
+    <circle cx="9" cy="7" r="1.15" />
+    <circle cx="15" cy="7" r="1.15" />
+    <circle cx="9" cy="12" r="1.15" />
+    <circle cx="15" cy="12" r="1.15" />
+    <circle cx="9" cy="17" r="1.15" />
+    <circle cx="15" cy="17" r="1.15" />
+  </svg>
+);
+
 export const BoardMark = ({ className = 'h-5 w-5' }) => (
   <svg aria-hidden="true" viewBox="0 0 24 24" className={frame(className)} fill="none">
     <line x1="4" y1="6" x2="20" y2="6" stroke="currentColor" strokeWidth="1.5" />

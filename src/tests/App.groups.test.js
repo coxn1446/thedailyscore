@@ -21,7 +21,17 @@ describe('join auth gate', () => {
     });
   });
 
-  test('sends a guest from an old invite link to sign-in for the board', async () => {
+  test('opens the board for a guest from an old invite link', async () => {
+    global.fetch = jest.fn(async (url) => {
+      const path = String(url);
+      if (path.includes('/api/auth/config')) {
+        return { ok: true, json: async () => ({ googleClientId: null, appleClientId: null }) };
+      }
+      if (path.includes('/api/board') || path.includes('/api/feed')) {
+        return { ok: true, status: 200, json: async () => ({ games: [], standings: [], board: null, posts: [] }) };
+      }
+      return { ok: false, status: 401, json: async () => ({ error: 'Not authenticated' }) };
+    });
     const store = configureStore({ reducer: rootReducer });
     render(
       <Provider store={store}>
@@ -32,7 +42,8 @@ describe('join auth gate', () => {
       </Provider>
     );
 
-    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
-    expect(screen.getByTestId('location')).toHaveTextContent('/login?next=%2Fboard');
+    expect(await screen.findByRole('button', { name: 'Global' })).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/board');
+    expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument();
   });
 });

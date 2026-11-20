@@ -2,6 +2,7 @@ const { isDbHealthy, query } = require('../db');
 const friendQueries = require('../queries/friendQueries');
 const userQueries = require('../queries/userQueries');
 const pushService = require('./pushService');
+const notificationService = require('./notificationService');
 
 const DB_REQUIRED = 'Database is unavailable. Start Postgres and apply server/db/schema.sql.';
 
@@ -96,7 +97,15 @@ const request = async (userId, handle) => {
   const actor = await actorOf(userId);
   try {
     if (becameFriends) await pushService.notifyFriendAccept({ requesterId: target.user_id, actor });
-    else await pushService.notifyFriendRequest({ addresseeId: target.user_id, actor });
+    else {
+      await pushService.notifyFriendRequest({ addresseeId: target.user_id, actor });
+      await notificationService.record({
+        userId: target.user_id,
+        actorId: userId,
+        kind: 'friend_request',
+        friendshipId: row.friendship_id,
+      });
+    }
   } catch (err) {
     console.error('Friend push failed:', err.message);
   }

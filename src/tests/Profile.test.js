@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
@@ -592,5 +592,64 @@ describe('Profile bests', () => {
       expect(toast.error).toHaveBeenCalledWith('Could not save');
       expect(toggle).toHaveAttribute('aria-checked', 'false');
     });
+  });
+
+  test('keeps a guest profile on this device', async () => {
+    const user = userEvent.setup();
+    const store = configureStore({
+      reducer: rootReducer,
+      preloadedState: { auth: { user: null, isAuthenticated: false, isLoading: false } },
+    });
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <Profile />
+        </MemoryRouter>
+      </Provider>
+    );
+    expect(await screen.findByRole('heading', { name: 'Guest' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Profile' }));
+    expect(screen.getByRole('link', { name: 'Log In' })).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('link', { name: 'Create account' })).toHaveAttribute('href', '/register');
+    expect(screen.queryByRole('button', { name: 'Sign Out' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.queryByRole('switch', { name: 'Notifications' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Export CSV' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('switch', { name: 'Night mode' }));
+    expect(screen.getByRole('switch', { name: 'Night mode' })).toHaveAttribute('aria-checked', 'true');
+    expect(global.fetch.mock.calls.some((call) => call[1]?.method === 'PATCH')).toBe(false);
+  });
+
+  test('sends a guest to log in before adding a friend', async () => {
+    const user = userEvent.setup();
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        user: { user_id: 8, handle: 'bea', display_name: 'Bea' },
+        stats: [],
+        relation: { status: 'none' },
+      }),
+    }));
+    const Where = () => {
+      const location = useLocation();
+      return <div data-testid="where">{`${location.pathname}${location.search}`}</div>;
+    };
+    const store = configureStore({
+      reducer: rootReducer,
+      preloadedState: { auth: { user: null, isAuthenticated: false, isLoading: false } },
+    });
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/profile/bea']}>
+          <Where />
+          <Routes>
+            <Route path="/profile/:handle" element={<Profile />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+    await user.click(await screen.findByRole('button', { name: 'Add Friend' }));
+    expect(screen.getByTestId('where').textContent).toContain('/login?next=');
+    expect(global.fetch.mock.calls.some((call) => String(call[0]).includes('/api/friends'))).toBe(false);
   });
 });

@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { useSelector } from 'react-redux';
 import toast from 'react-hot-toast';
 import { ruleButtonClass } from '../Auth/AuthPageLayout';
 import GameLogo from '../Brand/GameLogo';
+import { deleteGuestScore, guestArchiveRows } from '../../helpers/guestCache';
 import { SCORE_POSTED, deleteScore, fetchArchive, formatMetrics, formatResult } from '../../helpers/scoreHelpers';
+import { selectUser } from '../../store/auth.reducer';
 
 const formatLogged = (value, timeZone) => {
   if (!value) return '—';
@@ -17,6 +20,7 @@ const formatLogged = (value, timeZone) => {
 };
 
 const GameArchive = ({ timeZone }) => {
+  const user = useSelector(selectUser);
   const [scores, setScores] = useState([]);
   const [pendingId, setPendingId] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -24,6 +28,13 @@ const GameArchive = ({ timeZone }) => {
   useEffect(() => {
     let cancelled = false;
     const load = () => {
+      if (!user?.user_id) {
+        if (!cancelled) {
+          setScores(guestArchiveRows());
+          setLoaded(true);
+        }
+        return;
+      }
       fetchArchive()
         .then((data) => {
           if (cancelled) return;
@@ -43,11 +54,17 @@ const GameArchive = ({ timeZone }) => {
       cancelled = true;
       window.removeEventListener(SCORE_POSTED, load);
     };
-  }, []);
+  }, [user?.user_id]);
 
   const remove = async (scoreId) => {
     setPendingId(scoreId);
     try {
+      if (!user?.user_id) {
+        deleteGuestScore(scoreId);
+        setScores((current) => current.filter((row) => row.score_id !== scoreId));
+        window.dispatchEvent(new Event(SCORE_POSTED));
+        return;
+      }
       await deleteScore(scoreId);
       setScores((current) => current.filter((row) => row.score_id !== scoreId));
     } catch (err) {

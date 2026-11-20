@@ -51,6 +51,7 @@ describe('night mode', () => {
   test('the first paint reads the saved account', () => {
     const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
     expect(html).toContain("localStorage.getItem('ds:auth:user')");
+    expect(html).toContain("localStorage.getItem('ds:guest')");
     expect(html).toContain('night_mode');
     expect(html).toContain("classList.add('night')");
   });

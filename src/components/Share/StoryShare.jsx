@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useSelector } from 'react-redux';
 import toast from 'react-hot-toast';
 import { inkButtonClass } from '../Auth/AuthPageLayout';
 import { CloseMark } from '../Brand/Marks';
 import GameLogo from '../Brand/GameLogo';
 import instagramLogo from '../../assets/instagram.png';
+import { guestRecap } from '../../helpers/guestCache';
 import { fetchRecap } from '../../helpers/scoreHelpers';
+import { selectIsAuthenticated } from '../../store/auth.reducer';
 import { drawStory, shareStory, storySpec, STORY_STYLES } from '../../helpers/storyCard';
 
 const PERIODS = [
@@ -25,6 +28,7 @@ const tabClass = (active) =>
   }`;
 
 const StoryShare = ({ onClose }) => {
+  const signedIn = useSelector(selectIsAuthenticated);
   const [period, setPeriod] = useState('today');
   const [style, setStyle] = useState('paper');
   const [recap, setRecap] = useState(null);
@@ -40,6 +44,10 @@ const StoryShare = ({ onClose }) => {
   }, [onClose]);
 
   useEffect(() => {
+    if (!signedIn) {
+      setRecap(guestRecap(period));
+      return undefined;
+    }
     let cancelled = false;
     fetchRecap(period)
       .then((data) => {
@@ -51,7 +59,7 @@ const StoryShare = ({ onClose }) => {
     return () => {
       cancelled = true;
     };
-  }, [period]);
+  }, [period, signedIn]);
 
   const share = async () => {
     if (pending) return;

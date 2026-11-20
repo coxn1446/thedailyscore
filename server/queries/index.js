@@ -8,6 +8,8 @@ const deviceQueries = require('./deviceQueries');
 const pushQueries = require('./pushQueries');
 const friendQueries = require('./friendQueries');
 const feedQueries = require('./feedQueries');
+const notificationQueries = require('./notificationQueries');
+const bugQueries = require('./bugQueries');
 
 module.exports = {
   userQueries,
@@ -20,4 +22,6 @@ module.exports = {
   pushQueries,
   friendQueries,
   feedQueries,
+  notificationQueries,
+  bugQueries,
 };

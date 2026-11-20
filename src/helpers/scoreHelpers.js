@@ -5,8 +5,11 @@ const request = (url, options = {}) => apiJson(url, options);
 
 export const SCORE_POSTED = 'ds:score';
 
-export const previewScore = (paste) =>
-  request('/api/scores/preview', { method: 'POST', body: JSON.stringify({ paste }) });
+export const previewScore = (paste, timezone) =>
+  request('/api/scores/preview', {
+    method: 'POST',
+    body: JSON.stringify(timezone ? { paste, timezone } : { paste }),
+  });
 
 export const postScore = (paste, groups, imageUrl) => {
   const body = groups === undefined ? { paste } : { paste, groups };

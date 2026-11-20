@@ -108,7 +108,14 @@ const recognize = async (client, userId, paste, now, timezone = 'UTC') => {
   if (!Number.isInteger(parsed.puzzle_number) || parsed.puzzle_number < 0) {
     httpError(400, 'Unrecognized result');
   }
-  const destinations = await run(client, scoreQueries.listDestinations, [userId, parsed.slug]);
+  let destinations = [];
+  if (userId) {
+    const listed = await run(client, scoreQueries.listDestinations, [userId, parsed.slug]);
+    destinations = listed.rows.map((row) => ({
+      group_id: row.group_id,
+      name: row.name,
+    }));
+  }
   return {
     trimmed,
     parsed: {
@@ -116,10 +123,7 @@ const recognize = async (client, userId, paste, now, timezone = 'UTC') => {
       snippet: String(parsed.snippet || '').slice(0, 2000),
     },
     game,
-    destinations: destinations.rows.map((row) => ({
-      group_id: row.group_id,
-      name: row.name,
-    })),
+    destinations,
   };
 };
 
@@ -147,13 +151,18 @@ const present = (recognized, groups) => ({
 
 const preview = async (userId, paste, now = new Date(), timezone = 'UTC') => {
   const recognized = await recognize(null, userId, paste, now, timezone);
-  return present(
+  const body = present(
     recognized,
     recognized.destinations.map((group) => ({
       group_id: group.group_id,
       name: group.name,
     }))
   );
+  const played = /^\d{4}-\d{2}-\d{2}$/.test(recognized.parsed.played_on) ? recognized.parsed.played_on : '';
+  body.played_on = played
+    || puzzleDate(recognized.game.slug, recognized.parsed.puzzle_number)
+    || now.toISOString().slice(0, 10);
+  return body;
 };
 
 const loadBoard = async (client, game, parsed, groupIds) => {
@@ -174,7 +183,7 @@ const pickGroups = (destinations, groupIds) => {
   return destinations.filter((group) => wanted.has(Number(group.group_id)));
 };
 
-const confirm = async (userId, paste, now = new Date(), groupIds, timezone = 'UTC', imageUrl) => {
+const confirm = async (userId, paste, now = new Date(), groupIds, timezone = 'UTC', imageUrl, options = {}) => {
   const picture = normalizeImageUrl(imageUrl);
   const recognized = await recognize(null, userId, paste, now, timezone);
   const { trimmed, parsed, game } = recognized;
@@ -251,31 +260,59 @@ const confirm = async (userId, paste, now = new Date(), groupIds, timezone = 'UT
     console.error('Global rank failed:', err.message);
     posted.global_rank = null;
   }
-  try {
-    const pushService = require('./pushService');
-    await pushService.notifyScore({
-      userId,
-      gameName: game.name,
-      groups: destinations,
-    });
-  } catch (err) {
-    console.error('Crown push failed:', err.message);
-  }
-  try {
-    require('../socket').joinUnlocked(userId);
-  } catch (err) {
-    console.error('Parlor room join failed:', err.message);
-  }
-  try {
-    await require('./parlorService').noteStandings({
-      userId,
-      game,
-      groups: destinations,
-    });
-  } catch (err) {
-    console.error('Standings note failed:', err.message);
+  if (options.notify !== false) {
+    try {
+      const pushService = require('./pushService');
+      await pushService.notifyScore({
+        userId,
+        gameName: game.name,
+        groups: destinations,
+      });
+    } catch (err) {
+      console.error('Crown push failed:', err.message);
+    }
+    try {
+      require('../socket').joinUnlocked(userId);
+    } catch (err) {
+      console.error('Parlor room join failed:', err.message);
+    }
+    try {
+      await require('./parlorService').noteStandings({
+        userId,
+        game,
+        groups: destinations,
+      });
+    } catch (err) {
+      console.error('Standings note failed:', err.message);
+    }
   }
   return posted;
+};
+
+const IMPORT_LIMIT = 200;
+
+const importPastes = async (userId, pastes, timezone = 'UTC', now = new Date()) => {
+  if (!Array.isArray(pastes)) httpError(400, 'Paste a result');
+  if (pastes.length > IMPORT_LIMIT) httpError(400, 'Too many scores');
+  let saved = 0;
+  let skipped = 0;
+  for (const paste of pastes) {
+    if (typeof paste !== 'string' || !paste.trim()) {
+      skipped += 1;
+      continue;
+    }
+    try {
+      await confirm(userId, paste, now, [], timezone, null, { notify: false });
+      saved += 1;
+    } catch (err) {
+      if (err.status === 409) {
+        skipped += 1;
+        continue;
+      }
+      throw err;
+    }
+  }
+  return { saved, skipped };
 };
 
 const isFlag = (value) => value === true || value === 't';
@@ -1382,6 +1419,8 @@ const recap = async (userId, timezone, period) => {
   try {
     const enabled = await require('./profileService').enabledSlugSet(userId);
     if (enabled) picked = games.filter((game) => enabled.has(game.slug));
+    const { slugOrder, sortWith } = require('./gameOrder');
+    picked = sortWith(picked, await slugOrder(userId), (game) => game.slug);
   } catch (err) {
     console.error('Game filter failed:', err.message);
   }
@@ -1391,6 +1430,7 @@ const recap = async (userId, timezone, period) => {
 module.exports = {
   preview,
   confirm,
+  importPastes,
   assignRanks,
   buildStandings,
   buildDayEntries,

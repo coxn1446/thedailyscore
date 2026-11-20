@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import Board from '../routes/Board';
@@ -58,16 +58,22 @@ const payload = {
     },
 };
 
-const renderBoard = () => {
+const Where = () => {
+  const location = useLocation();
+  return <div data-testid="where">{`${location.pathname}${location.search}`}</div>;
+};
+
+const renderBoard = (user = { user_id: 4, handle: 'ada' }) => {
   const store = configureStore({
     reducer: { auth: authReducer },
     preloadedState: {
-      auth: { user: { user_id: 4, handle: 'ada' }, isAuthenticated: true, isLoading: false },
+      auth: { user, isAuthenticated: Boolean(user?.user_id), isLoading: false },
     },
   });
   return render(
     <Provider store={store}>
       <MemoryRouter initialEntries={['/board']}>
+        <Where />
         <Board />
       </MemoryRouter>
     </Provider>
@@ -92,12 +98,23 @@ describe('Board', () => {
     expect(games.closest('.overflow-y-auto')).toBeNull();
     expect(screen.getAllByText('2nd').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Global' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByRole('button', { name: 'Follow' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Bea' })).toHaveAttribute('href', '/profile/bea');
+    expect(screen.queryByRole('button', { name: 'Add Friend' })).not.toBeInTheDocument();
+    const bea = screen.getByRole('link', { name: /Bea/ });
+    expect(bea).toHaveAttribute('href', '/post/2');
+    expect(bea).toHaveTextContent('400');
     expect(screen.queryByRole('button', { name: 'Graphs' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Friends' }));
     expect(screen.getByRole('button', { name: 'Friends' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByPlaceholderText('handle')).not.toBeInTheDocument();
+  });
+
+  test('sends a guest to log in for the friends board', async () => {
+    const user = userEvent.setup();
+    renderBoard(null);
+    expect(await screen.findByRole('button', { name: 'Global' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Friends' }));
+    expect(screen.getByTestId('where')).toHaveTextContent('/login?next=');
+    expect(screen.getByTestId('where').textContent).toContain('scope%3Dfriends');
   });
 
   test('puts the all-time multiplier in the question mark', async () => {

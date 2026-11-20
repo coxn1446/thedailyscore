@@ -14,6 +14,7 @@ jest.mock('react-hot-toast', () => ({
 }));
 
 const krillionPaste = 'Krillion #74 🦐\n355';
+const reader = { user_id: 4, handle: 'ada', needs_handle: false };
 
 const previewPayload = {
   game: {
@@ -82,7 +83,7 @@ describe('Home paste desk', () => {
       return { ok: true, json: async () => postedPayload };
     });
 
-    renderHome();
+    renderHome(reader);
     expect(screen.getByRole('heading', { name: 'What did you play today?' })).toBeInTheDocument();
     expect(screen.getByLabelText('Result')).toHaveAttribute(
       'placeholder',
@@ -132,7 +133,7 @@ describe('Home paste desk', () => {
       return { ok: true, json: async () => ({ ...postedPayload, personal: { best_week: true, best_all: false } }) };
     });
 
-    renderHome();
+    renderHome(reader);
     await user.click(screen.getByLabelText('Result'));
     await user.paste(krillionPaste);
     await user.click(screen.getByRole('button', { name: 'Submit' }));
@@ -189,7 +190,8 @@ describe('Home paste desk', () => {
     await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Game not recognized.');
-    expect(screen.getByRole('link', { name: 'Submit a request?' })).toHaveAttribute('href', '/request-game');
+    expect(screen.getByRole('link', { name: 'Submit a request for a new game?' })).toHaveAttribute('href', '/login?next=/request-game');
+    expect(screen.getByRole('link', { name: 'Report a bug' })).toHaveAttribute('href', '/login?next=/');
     expect(screen.getByRole('heading', { name: 'What did you play today?' })).toBeInTheDocument();
     await waitFor(() => {
       expect(global.fetch.mock.calls.some((call) => String(call[0]).includes('/preview'))).toBe(true);
@@ -208,7 +210,7 @@ describe('Home paste desk', () => {
       return { ok: true, json: async () => ({ ...alone, groups: [] }) };
     });
 
-    renderHome();
+    renderHome(reader);
     await user.type(screen.getByLabelText('Result'), 'Krillion #74');
     await user.click(screen.getByRole('button', { name: 'Submit' }));
     expect(await screen.findByRole('button', { name: 'Post' })).toBeInTheDocument();
@@ -232,7 +234,7 @@ describe('Home paste desk', () => {
       return { ok: true, json: async () => ({ ...postedPayload, global_rank: 1 }) };
     });
 
-    renderHome();
+    renderHome(reader);
     await user.type(screen.getByLabelText('Result'), 'Krillion');
     await user.click(screen.getByRole('button', { name: 'Submit' }));
     expect(screen.queryByRole('button', { name: 'Select All' })).not.toBeInTheDocument();
@@ -404,7 +406,7 @@ describe('Home paste desk', () => {
       }),
     });
 
-    const view = renderHome();
+    const view = renderHome(reader);
     await user.click(screen.getByRole('button', { name: "Copy Today's Score" }));
     await waitFor(() => {
       expect(copied).toBe(
@@ -422,7 +424,7 @@ describe('Home paste desk', () => {
     document.execCommand = jest.fn(() => true);
     global.fetch.mockResolvedValue({ ok: true, json: async () => ({ on: '2026-09-30', scores: [] }) });
     view.unmount();
-    renderHome();
+    renderHome(reader);
     await waitFor(() => {
       expect(global.fetch.mock.calls.filter((call) => String(call[0]).includes('/api/scores/today')).length).toBeGreaterThan(1);
     });
@@ -481,5 +483,29 @@ describe('Home paste desk', () => {
     await waitFor(() => {
       expect(screen.queryByRole('status')).not.toBeInTheDocument();
     });
+  });
+
+  test('keeps a guest score on this device', async () => {
+    const user = userEvent.setup();
+    global.fetch.mockImplementation(async (url) => {
+      if (String(url).includes('/preview')) {
+        return { ok: true, json: async () => ({ ...previewPayload, played_on: '2026-11-19', groups: [] }) };
+      }
+      return { ok: true, json: async () => ({ posts: [] }) };
+    });
+    renderHome();
+    await user.type(screen.getByLabelText('Result'), krillionPaste);
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(await screen.findByRole('button', { name: 'Post' }));
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('Best all time.');
+    });
+    expect(global.fetch.mock.calls.some((call) => String(call[0]) === '/api/scores' && call[1]?.method === 'POST')).toBe(false);
+    expect(await screen.findByText('Guest')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Result'), krillionPaste);
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(await screen.findByRole('button', { name: 'Post' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent("you've already uploaded this score");
   });
 });

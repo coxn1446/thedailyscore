@@ -10,6 +10,7 @@ jest.mock('../../server/services/pushService', () => ({
 
 const { isDbHealthy, query } = require('../../server/db');
 const feedQueries = require('../../server/queries/feedQueries');
+const notificationQueries = require('../../server/queries/notificationQueries');
 const scoreQueries = require('../../server/queries/scoreQueries');
 const pushService = require('../../server/services/pushService');
 const feedService = require('../../server/services/feedService');
@@ -23,14 +24,45 @@ let scores;
 let likes;
 let comments;
 let nextComment;
+let feedScope;
 
 const install = () => {
   query.mockImplementation(async (sql, params) => {
-    if (sql === feedQueries.listFeed || sql === feedQueries.findPost) {
+    if (sql === feedQueries.findScope) {
+      return { rows: [{ feed_scope: feedScope }] };
+    }
+    if (sql === feedQueries.findViewerScore) {
+      const [userId, scoreId] = params.map(Number);
+      const target = scores.find((row) => row.score_id === scoreId);
+      const mine = scores.find((row) => (
+        row.user_id === userId
+        && target
+        && row.puzzle_number === target.puzzle_number
+        && row.slug === target.slug
+        && row.score_id !== scoreId
+      ));
+      return { rows: mine ? [{ ...mine, game_name: 'Krillion' }] : [] };
+    }
+    if (sql === feedQueries.dayAverage) {
+      const target = scores.find((row) => row.score_id === Number(params[0]));
+      const same = scores.filter((row) => (
+        target
+        && row.puzzle_number === target.puzzle_number
+        && row.slug === target.slug
+        && !users[row.user_id].suspended
+        && row.score != null
+      ));
+      const average = same.length ? same.reduce((sum, row) => sum + Number(row.score), 0) / same.length : null;
+      return { rows: [{ average_score: average, average_guesses: null }] };
+    }
+    if (sql === notificationQueries.insertNotification) return { rows: [{ notification_id: 1 }] };
+    if (sql === feedQueries.listFeed || sql === feedQueries.listFriendsFeed || sql === feedQueries.findPost) {
       const readerId = Number(params[0]);
       const only = sql === feedQueries.findPost ? Number(params[1]) : null;
+      const friendsOnly = sql === feedQueries.listFriendsFeed;
       const rows = scores
         .filter((row) => only == null || row.score_id === only)
+        .filter((row) => !friendsOnly || row.user_id === readerId)
         .filter((row) => !users[row.user_id].suspended)
         .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || b.score_id - a.score_id)
         .map((row) => ({
@@ -151,11 +183,27 @@ describe('feed service', () => {
     likes = [];
     comments = [];
     nextComment = 1;
+    feedScope = 'everyone';
     users[4].suspended = false;
     users[8].suspended = false;
     pushService.notifyLike.mockClear();
     pushService.notifyComment.mockClear();
     install();
+  });
+
+  test('limits the feed to the reader when friends is saved', async () => {
+    feedScope = 'friends';
+    const feed = await feedService.list(8);
+    expect(feed.scope).toBe('friends');
+    expect(feed.posts.map((post) => post.score_id)).toEqual([2]);
+  });
+
+  test('returns the viewer score for the same puzzle', async () => {
+    const payload = await feedService.get(4, 2);
+    expect(payload.viewer_score).toMatchObject({ score_id: 1, score: 355 });
+    expect(payload.day_average.score).toBe(277.5);
+    const own = await feedService.get(4, 1);
+    expect(own.viewer_score).toBeNull();
   });
 
   test('lists scores for a signed-in reader', async () => {

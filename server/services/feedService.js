@@ -2,6 +2,7 @@ const { isDbHealthy, query } = require('../db');
 const feedQueries = require('../queries/feedQueries');
 const scoreQueries = require('../queries/scoreQueries');
 const pushService = require('./pushService');
+const notificationService = require('./notificationService');
 const { normalizeImageUrl } = require('../utils/imageUrl');
 
 const DB_REQUIRED = 'Database is unavailable. Start Postgres and apply server/db/schema.sql.';
@@ -74,17 +75,60 @@ const requireScore = async (scoreId) => {
   return score;
 };
 
+const readScope = async (userId) => {
+  if (!userId) return 'everyone';
+  const row = await one(feedQueries.findScope, [userId]);
+  return row?.feed_scope === 'friends' ? 'friends' : 'everyone';
+};
+
+const presentDayAverage = (row, game) => ({
+  score: row?.average_score == null ? null : Number(row.average_score),
+  guesses: row?.average_guesses == null ? null : Number(row.average_guesses),
+  solved: true,
+  game,
+});
+
+const presentViewerScore = (row) => {
+  if (!row) return null;
+  return {
+    score_id: Number(row.score_id),
+    puzzle_number: Number(row.puzzle_number),
+    snippet: row.snippet || '',
+    score: row.score == null ? null : Number(row.score),
+    guesses: row.guesses == null ? null : Number(row.guesses),
+    solved: row.solved !== false && row.solved !== 'f',
+    played_on: row.played_on,
+    game: {
+      slug: row.slug,
+      name: row.game_name,
+      rank_basis: row.rank_basis,
+      guess_cap: row.guess_cap == null ? null : Number(row.guess_cap),
+    },
+  };
+};
+
 const list = async (userId) => {
   requireDb();
-  const listed = await query(feedQueries.listFeed, [userId]);
-  return { posts: listed.rows.map(presentPost) };
+  const scope = await readScope(userId);
+  const listed = await query(scope === 'friends' ? feedQueries.listFriendsFeed : feedQueries.listFeed, [userId]);
+  return { scope, posts: listed.rows.map(presentPost) };
 };
 
 const get = async (userId, scoreId) => {
   requireDb();
   const row = await one(feedQueries.findPost, [userId, scoreId]);
   if (!row) httpError(404, 'Score not found');
-  return { post: presentPost(row) };
+  let viewerScore = null;
+  if (userId && Number(userId) !== Number(row.user_id)) {
+    viewerScore = presentViewerScore(await one(feedQueries.findViewerScore, [userId, scoreId]));
+  }
+  const post = presentPost(row);
+  const average = await one(feedQueries.dayAverage, [scoreId]);
+  return {
+    post,
+    viewer_score: viewerScore,
+    day_average: presentDayAverage(average, post.game),
+  };
 };
 
 const notifyAuthor = async (kind, score, userId) => {
@@ -94,6 +138,12 @@ const notifyAuthor = async (kind, score, userId) => {
     const payload = { authorId: score.user_id, scoreId: score.score_id, actor };
     if (kind === 'like') await pushService.notifyLike(payload);
     else await pushService.notifyComment(payload);
+    await notificationService.record({
+      userId: score.user_id,
+      actorId: userId,
+      kind,
+      scoreId: score.score_id,
+    });
   } catch (err) {
     console.error(kind === 'like' ? 'Like push failed:' : 'Comment push failed:', err.message);
   }

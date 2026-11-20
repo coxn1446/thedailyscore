@@ -6,6 +6,7 @@ jest.mock('../../server/services/profileService', () => ({
   updateNightMode: jest.fn(),
   exportScores: jest.fn(),
   removeAccount: jest.fn(),
+  readPlayer: jest.fn(),
 }));
 
 const profileService = require('../../server/services/profileService');
@@ -67,6 +68,16 @@ const invoke = (method, url, extra = {}) => {
 describe('profile routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  test('reads another reader without a session', async () => {
+    profileService.readPlayer.mockResolvedValue({ user: { handle: 'ada' }, stats: [], relation: { status: 'none' } });
+    const read = await invoke('GET', '/player/ada');
+    expect(read.status).toBe(200);
+    expect(profileService.readPlayer).toHaveBeenCalledWith(null, 'ada');
+    const signedIn = await invoke('GET', '/player/ada', { authenticated: true });
+    expect(signedIn.status).toBe(200);
+    expect(profileService.readPlayer).toHaveBeenLastCalledWith(4, 'ada');
   });
 
   test('rejects a guest', async () => {

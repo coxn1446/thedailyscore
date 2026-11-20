@@ -48,9 +48,10 @@ module.exports = () => {
     }
   });
 
-  router.get('/player/:handle', requireAuth, async (req, res, next) => {
+  router.get('/player/:handle', async (req, res, next) => {
     try {
-      const payload = await profileService.readPlayer(req.user.user_id, req.params.handle);
+      const viewerId = req.isAuthenticated?.() && req.user ? req.user.user_id : null;
+      const payload = await profileService.readPlayer(viewerId, req.params.handle);
       return res.json(payload);
     } catch (err) {
       return next(err);
@@ -71,7 +72,9 @@ module.exports = () => {
     try {
       const body = req.body || {};
       const identity = body.display_name != null || body.handle != null || body.email != null;
-      const user = !identity && body.notifications != null
+      const user = !identity && body.feed_scope != null
+        ? await profileService.updateFeedScope(req.user.user_id, body)
+        : !identity && body.notifications != null
         ? await profileService.updateNotifications(req.user.user_id, body)
         : !identity && body.night_mode != null
           ? await profileService.updateNightMode(req.user.user_id, body)

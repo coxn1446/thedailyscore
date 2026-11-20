@@ -33,16 +33,18 @@ const emptyBoardTitle = (period) => {
   return 'Nothing filed.';
 };
 
-const PlayerIdentity = ({ entry, suffix }) => {
+const PlayerIdentity = ({ entry, suffix, linked = true }) => {
   const name = entry.display_name || entry.handle;
   return (
     <span className="min-w-0 font-sans text-body-md text-primary">
-      <Link
-        to={entry.mine || !entry.handle ? '/profile' : `/profile/${entry.handle}`}
-        className="underline decoration-primary underline-offset-2 hover:text-secondary hover:decoration-secondary"
-      >
-        {name}
-      </Link>
+      {linked ? (
+        <Link
+          to={entry.mine || !entry.handle ? '/profile' : `/profile/${entry.handle}`}
+          className="underline decoration-primary underline-offset-2 hover:text-secondary hover:decoration-secondary"
+        >
+          {name}
+        </Link>
+      ) : name}
       {suffix ? ` - ${suffix}` : null}
     </span>
   );
@@ -127,19 +129,24 @@ const BoardEntries = ({ entries, board }) => (
   <ol className="mt-space-md">
     {entries.map((entry) => {
       const when = formatPuzzleDay(entry.played_on);
+      const postId = entry.layout === 'summary' || !entry.score_id ? null : entry.score_id;
+      const row = (
+        <div className={`flex items-center gap-space-sm border-b border-border py-space-sm ${entry.mine ? 'bg-inset' : ''}`}>
+          <span className="w-10 shrink-0 font-mono text-body-md text-primary">{ordinal(entry.rank)}</span>
+          <Portrait entry={entry} />
+          <span className="min-w-0 flex-1">
+            <PlayerIdentity entry={entry} suffix={when} linked={!postId} />
+          </span>
+          <span className="font-mono text-body-md text-primary">{scoreLabel(entry, board)}</span>
+        </div>
+      );
       return (
-        <li
-          key={`${entry.score_id ?? entry.user_id}-${entry.puzzle_number ?? 'mark'}-${entry.score ?? entry.guesses ?? ''}`}
-          className={`border-b border-border py-space-sm ${entry.mine ? 'bg-inset' : ''}`}
-        >
-          <div className="flex items-center gap-space-sm">
-            <span className="w-10 shrink-0 font-mono text-body-md text-primary">{ordinal(entry.rank)}</span>
-            <Portrait entry={entry} />
-            <span className="min-w-0 flex-1">
-              <PlayerIdentity entry={entry} suffix={when} />
-            </span>
-            <span className="font-mono text-body-md text-primary">{scoreLabel(entry, board)}</span>
-          </div>
+        <li key={`${entry.score_id ?? entry.user_id}-${entry.puzzle_number ?? 'mark'}-${entry.score ?? entry.guesses ?? ''}`}>
+          {postId ? (
+            <Link to={`/post/${postId}`} className="block text-primary hover:bg-inset">
+              {row}
+            </Link>
+          ) : row}
         </li>
       );
     })}

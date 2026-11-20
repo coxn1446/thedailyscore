@@ -1,5 +1,6 @@
 const { isDbHealthy, query } = require('../db');
 const gameRequestQueries = require('../queries/gameRequestQueries');
+const bugQueries = require('../queries/bugQueries');
 
 const DB_REQUIRED = 'Database is unavailable. Start Postgres and apply server/db/schema.sql.';
 
@@ -31,13 +32,18 @@ const listRequests = async () => {
 
 const unseenCount = async () => {
   requireDb();
-  const row = await query(gameRequestQueries.countUnseen);
-  return { count: Number(row.rows[0]?.count) || 0 };
+  const [requests, bugs] = await Promise.all([
+    query(gameRequestQueries.countUnseen),
+    query(bugQueries.countUnseen),
+  ]);
+  const count = (Number(requests.rows[0]?.count) || 0) + (Number(bugs?.rows?.[0]?.count) || 0);
+  return { count };
 };
 
 const markSeen = async () => {
   requireDb();
   await query(gameRequestQueries.markSeen);
+  await query(bugQueries.markSeen);
   return { count: 0 };
 };
 

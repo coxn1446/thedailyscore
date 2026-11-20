@@ -530,4 +530,18 @@ describe('scoreService', () => {
     ]);
     expect(card.games[0].line).toContain('300');
   });
+
+  test('previews a guest paste without groups and imports it once', async () => {
+    const pushService = require('../../server/services/pushService');
+    const preview = await scoreService.preview(null, krillion.paste, krillion.now);
+    expect(preview.groups).toEqual([]);
+    expect(preview.played_on).toEqual(expect.any(String));
+    expect(scores).toHaveLength(0);
+
+    pushService.notifyScore.mockClear();
+    const imported = await scoreService.importPastes(4, [krillion.paste, krillion.paste, ''], 'UTC', krillion.now);
+    expect(imported).toEqual({ saved: 1, skipped: 2 });
+    expect(scores).toHaveLength(1);
+    expect(pushService.notifyScore).not.toHaveBeenCalled();
+  });
 });

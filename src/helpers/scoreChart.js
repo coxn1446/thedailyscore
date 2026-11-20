@@ -79,3 +79,11 @@ export const buildScoreLines = (scores) => {
   const dates = rows.map((item) => item.on).sort();
   return { series, start: dates[0], end: dates[dates.length - 1] };
 };
+
+export const orderSeries = (series, slugs) => {
+  if (!Array.isArray(slugs) || !slugs.length) return series;
+  const rank = new Map(slugs.map((slug, index) => [slug, index]));
+  return [...series].sort(
+    (a, b) => (rank.get(a.slug) ?? slugs.length) - (rank.get(b.slug) ?? slugs.length)
+  );
+};

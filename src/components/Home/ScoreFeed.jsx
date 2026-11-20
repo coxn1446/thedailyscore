@@ -1,15 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { Capacitor } from '@capacitor/core';
 import toast from 'react-hot-toast';
 import GameLogo from '../Brand/GameLogo';
+import wordmark from '../../assets/the-daily-score-wordmark.png';
 import { CommentMark, LikeMark, MediaMark } from '../Brand/Marks';
 import { inkButtonClass } from '../Auth/AuthPageLayout';
 import UploadMeter from '../Loading/UploadMeter';
 import PhotoViewer from './PhotoViewer';
+import { guestFeedPosts } from '../../helpers/guestCache';
+import { signedOutLoginTarget } from '../../helpers/accountDeleted';
 import { selectUser } from '../../store/auth.reducer';
-import { gameHref } from '../../helpers/gameCatalog';
 import { formatResult } from '../../helpers/scoreHelpers';
 import { relativeTime } from '../../utils/relativeTime';
 import {
@@ -18,21 +19,13 @@ import {
   fetchFeed,
   likeScore,
   postComment,
+  saveFeedScope,
   unlikeScore,
   uploadPicture,
 } from '../../helpers/feedHelpers';
 
 const linkClass =
   'font-sans text-body-md text-primary underline decoration-primary underline-offset-2 hover:text-secondary hover:decoration-secondary';
-
-const openGame = async (event) => {
-  event.stopPropagation();
-  if (!Capacitor.isNativePlatform()) return;
-  event.preventDefault();
-  const url = event.currentTarget.href;
-  const { Browser } = await import('@capacitor/browser');
-  await Browser.open({ url });
-};
 
 const nameOf = (user) => user?.display_name || user?.handle || 'Reader';
 
@@ -52,6 +45,7 @@ const Portrait = ({ user }) => {
 };
 
 const CommentList = ({ post, viewerId, onCount }) => {
+  const location = useLocation();
   const [comments, setComments] = useState(null);
   const [draft, setDraft] = useState('');
   const [picture, setPicture] = useState(null);
@@ -144,6 +138,7 @@ const CommentList = ({ post, viewerId, onCount }) => {
           ) : null}
         </div>
       ))}
+      {viewerId ? (
       <form onSubmit={send} className="mt-space-sm border border-border-strong bg-background focus-within:border-primary">
         {previewUrl ? (
           <button type="button" aria-label="Open preview" onClick={() => setViewer(previewUrl)} className="block w-full cursor-pointer">
@@ -185,19 +180,92 @@ const CommentList = ({ post, viewerId, onCount }) => {
           </button>
         </div>
       </form>
+      ) : (
+        <Link
+          to={signedOutLoginTarget(location.pathname, location.search).to}
+          className={`${inkButtonClass} mt-space-sm`}
+        >
+          Log In
+        </Link>
+      )}
       {viewer ? <PhotoViewer src={viewer} onClose={() => setViewer('')} /> : null}
     </div>
   );
 };
 
-export const ScoreCard = ({ post, viewerId, detail = false, onChange }) => {
+const scoreOf = (result) => {
+  if (!result) return '—';
+  const text = formatResult(result);
+  return text || '—';
+};
+
+const CompareTable = ({ post, viewer, viewerScore, dayAverage }) => {
+  const rows = [
+    { key: 'author', user: post.user, result: post },
+  ];
+  if (viewerScore) rows.push({ key: 'you', user: viewer, result: viewerScore });
+  rows.push({ key: 'average', result: dayAverage });
+  return (
+    <table className="mt-space-md w-full">
+      <thead>
+        <tr className="border-b border-border">
+          <th className="py-space-sm text-left font-sans text-kicker uppercase tracking-kicker text-muted">User</th>
+          <th className="py-space-sm text-left font-sans text-kicker uppercase tracking-kicker text-muted">Result</th>
+          <th className="py-space-sm text-right font-sans text-kicker uppercase tracking-kicker text-muted">Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.key} className="border-b border-border">
+            <td className="py-space-sm">
+              {row.key === 'average' ? (
+                <span className="inline-flex items-center gap-space-sm">
+                  <span className="wordmark-plate px-space-sm py-space-xs">
+                    <img src={wordmark} alt="The Daily Score" className="h-12 w-auto object-contain" />
+                  </span>
+                  <span className="font-mono text-caption text-muted">(AVG)</span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-space-sm">
+                  <Portrait user={row.user} />
+                  {row.user?.handle ? (
+                    <Link to={row.key === 'you' ? '/profile' : `/profile/${row.user.handle}`} className={linkClass}>
+                      {nameOf(row.user)}
+                    </Link>
+                  ) : (
+                    <span className="font-sans text-body-md text-primary">{nameOf(row.user)}</span>
+                  )}
+                </span>
+              )}
+            </td>
+            <td className="py-space-sm">
+              {row.result?.snippet ? (
+                <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-caption text-primary">{row.result.snippet}</pre>
+              ) : (
+                <span className="font-mono text-caption text-muted">—</span>
+              )}
+            </td>
+            <td className="py-space-sm text-right font-mono text-body-md text-primary">{scoreOf(row.result)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+};
+
+export const ScoreCard = ({ post, viewerId, viewer = null, detail = false, viewerScore = null, dayAverage = null, onChange }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const likeLock = useRef(false);
   const when = relativeTime(post.created_at);
 
   const toggleLike = async (event) => {
     event.preventDefault();
     event.stopPropagation();
+    if (!viewerId || post.local) {
+      navigate(signedOutLoginTarget(location.pathname, location.search).to);
+      return;
+    }
     if (likeLock.current) return;
     likeLock.current = true;
     const previous = post;
@@ -219,7 +287,7 @@ export const ScoreCard = ({ post, viewerId, detail = false, onChange }) => {
   };
 
   const openPost = (event) => {
-    if (detail) return;
+    if (detail || post.local) return;
     const interactive = event.target.closest('a, button, input, textarea, label');
     if (interactive) return;
     navigate(`/post/${post.score_id}`);
@@ -238,8 +306,8 @@ export const ScoreCard = ({ post, viewerId, detail = false, onChange }) => {
     <article className="border-t border-border py-space-sm" onClick={openPost}>
       <div className="flex items-start justify-between gap-space-sm">
         <div className="flex items-center gap-space-sm whitespace-nowrap">
-          <Portrait user={post.user} />
-          {person}
+          {detail ? null : <Portrait user={post.user} />}
+          {detail ? null : person}
           {when ? (
             <time dateTime={post.created_at} className="font-mono text-caption text-muted">
               {when}
@@ -247,11 +315,9 @@ export const ScoreCard = ({ post, viewerId, detail = false, onChange }) => {
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-space-sm">
-          <a
-            href={gameHref(post.game?.slug)}
-            target="_blank"
-            rel="noreferrer"
-            onClick={openGame}
+          <Link
+            to={`/board?game=${encodeURIComponent(post.game?.slug || '')}&period=today`}
+            onClick={(event) => event.stopPropagation()}
             className="inline-flex items-center gap-space-sm text-secondary underline decoration-secondary underline-offset-2 hover:text-primary"
           >
             <span className="text-right">
@@ -259,10 +325,12 @@ export const ScoreCard = ({ post, viewerId, detail = false, onChange }) => {
               <span className="block font-mono text-caption text-muted no-underline">#{post.puzzle_number}</span>
             </span>
             <GameLogo slug={post.game?.slug} className="h-8 w-8" />
-          </a>
+          </Link>
         </div>
       </div>
       {detail ? (
+        <CompareTable post={post} viewer={viewer} viewerScore={viewerScore} dayAverage={dayAverage} />
+      ) : post.local ? (
         <div>
           <p className="mt-space-xs font-mono text-headline-md text-primary">{formatResult(post)}</p>
           {post.snippet ? (
@@ -292,7 +360,7 @@ export const ScoreCard = ({ post, viewerId, detail = false, onChange }) => {
           <LikeMark filled={post.liked} />
           {post.like_count}
         </button>
-        {detail ? (
+        {detail || post.local ? (
           <span className="inline-flex items-center gap-space-xs font-mono text-caption text-muted">
             <CommentMark />
             {post.comment_count}
@@ -315,30 +383,59 @@ export const ScoreCard = ({ post, viewerId, detail = false, onChange }) => {
   );
 };
 
+const mergePosts = (serverPosts, includeLocal) => {
+  const local = includeLocal ? guestFeedPosts() : [];
+  return [...local, ...(serverPosts || [])].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+};
+
+const scopeClass = (active) =>
+  `border-b-2 py-space-sm font-sans text-kicker uppercase tracking-kicker ${
+    active ? 'border-secondary text-primary' : 'border-transparent text-muted hover:text-primary'
+  }`;
+
 const ScoreFeed = ({ refreshKey = 0, onReady }) => {
   const user = useSelector(selectUser);
   const [posts, setPosts] = useState(null);
+  const [scope, setScope] = useState('everyone');
   const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
+    const includeLocal = !user?.user_id;
     fetchFeed()
       .then((data) => {
         if (!cancelled) {
-          setPosts(Array.isArray(data?.posts) ? data.posts : []);
+          setScope(data?.scope === 'friends' ? 'friends' : 'everyone');
+          setPosts(mergePosts(Array.isArray(data?.posts) ? data.posts : [], includeLocal));
           setError('');
         }
       })
       .catch((err) => {
         if (!cancelled) {
-          setPosts([]);
+          setPosts(includeLocal ? guestFeedPosts() : []);
           setError(err.message || 'Could not load the feed');
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [refreshKey, user?.user_id]);
+
+  const chooseScope = async (next) => {
+    if (!user?.user_id || next === scope) return;
+    const previous = scope;
+    setScope(next);
+    try {
+      await saveFeedScope(next);
+      const data = await fetchFeed();
+      setScope(data?.scope === 'friends' ? 'friends' : next);
+      setPosts(mergePosts(Array.isArray(data?.posts) ? data.posts : [], false));
+      setError('');
+    } catch (err) {
+      setScope(previous);
+      toast.error(err.message || 'Could not save the feed');
+    }
+  };
 
   useEffect(() => {
     if (posts && onReady) onReady();
@@ -350,6 +447,16 @@ const ScoreFeed = ({ refreshKey = 0, onReady }) => {
 
   return (
     <section aria-label="Feed" className="w-full">
+      {user?.user_id ? (
+        <nav aria-label="Feed scope" className="mt-space-lg flex gap-space-lg">
+          <button type="button" aria-pressed={scope === 'friends'} onClick={() => chooseScope('friends')} className={scopeClass(scope === 'friends')}>
+            Friends
+          </button>
+          <button type="button" aria-pressed={scope === 'everyone'} onClick={() => chooseScope('everyone')} className={scopeClass(scope === 'everyone')}>
+            Everyone
+          </button>
+        </nav>
+      ) : null}
       {error ? (
         <p role="alert" className="mt-space-lg font-sans text-body-md text-error">{error}</p>
       ) : null}

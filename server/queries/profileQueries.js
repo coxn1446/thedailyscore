@@ -37,7 +37,10 @@ const listStats = `
       )
     )
   GROUP BY ga.game_id, ga.slug, ga.name, ga.rank_basis, ga.guess_cap, ga.sort_order
-  ORDER BY ga.sort_order ASC, ga.game_id ASC
+  ORDER BY COALESCE(
+    (SELECT ug.sort_order FROM user_games ug WHERE ug.user_id = $1 AND ug.game_id = ga.game_id),
+    ga.sort_order
+  ) ASC, ga.game_id ASC
 `;
 
 const listExport = `
@@ -80,6 +83,15 @@ const updateNightMode = `
   UPDATE users
   SET
     night_mode = $2,
+    updated_at = NOW()
+  WHERE user_id = $1
+  RETURNING ${USER_FIELDS}
+`;
+
+const updateFeedScope = `
+  UPDATE users
+  SET
+    feed_scope = $2,
     updated_at = NOW()
   WHERE user_id = $1
   RETURNING ${USER_FIELDS}
@@ -165,17 +177,18 @@ const deleteUser = `
 `;
 
 const listUserGames = `
-  SELECT ga.slug, ug.enabled
+  SELECT ga.slug, ug.enabled, ug.sort_order
   FROM user_games ug
   JOIN games ga ON ga.game_id = ug.game_id
   WHERE ug.user_id = $1
 `;
 
 const upsertUserGame = `
-  INSERT INTO user_games (user_id, game_id, enabled)
-  VALUES ($1, $2, $3)
+  INSERT INTO user_games (user_id, game_id, enabled, sort_order)
+  VALUES ($1, $2, $3, $4)
   ON CONFLICT (user_id, game_id) DO UPDATE
-  SET enabled = EXCLUDED.enabled
+  SET enabled = EXCLUDED.enabled,
+      sort_order = EXCLUDED.sort_order
 `;
 
 module.exports = {
@@ -185,6 +198,7 @@ module.exports = {
   updateAlerts,
   updateNotifications,
   updateNightMode,
+  updateFeedScope,
   deleteOwnPublications,
   deleteOwnScores,
   promoteReplacementCurator,

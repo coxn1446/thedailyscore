@@ -3,9 +3,9 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import ScoreFeed from '../components/Home/ScoreFeed';
+import ScoreFeed, { ScoreCard } from '../components/Home/ScoreFeed';
 import rootReducer from '../store/rootReducer';
 
 jest.mock('react-hot-toast', () => ({
@@ -33,16 +33,22 @@ const post = {
   game: { slug: 'krillion', name: 'Krillion', rank_basis: 'score', guess_cap: null },
 };
 
+const Where = () => {
+  const location = useLocation();
+  return <div data-testid="where">{`${location.pathname}${location.search}`}</div>;
+};
+
 const renderFeed = (user = { user_id: 4, handle: 'ada' }) => {
   const store = configureStore({
     reducer: rootReducer,
     preloadedState: {
-      auth: { user, isAuthenticated: true, isLoading: false },
+      auth: { user, isAuthenticated: Boolean(user?.user_id), isLoading: false },
     },
   });
   return render(
     <Provider store={store}>
       <MemoryRouter>
+        <Where />
         <ScoreFeed />
       </MemoryRouter>
     </Provider>
@@ -139,18 +145,54 @@ describe('ScoreFeed', () => {
     expect(toast.error).toHaveBeenCalledWith('Could not like');
   });
 
-  test('opens a game link in the in-app browser on iOS', async () => {
-    const { Capacitor } = require('@capacitor/core');
-    const { Browser } = require('@capacitor/browser');
-    Capacitor.isNativePlatform.mockReturnValue(true);
-    Capacitor.getPlatform.mockReturnValue('ios');
-    global.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ posts: [post] }) });
-    const user = userEvent.setup();
+  test('opens the leaderboard for the game on a post', async () => {
+    global.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ posts: [post], scope: 'everyone' }) });
     renderFeed();
     const game = await screen.findByRole('link', { name: /Krillion/ });
-    expect(game).toHaveAttribute('href', 'https://krillion.io');
-    await user.click(game);
-    expect(Browser.open).toHaveBeenCalledWith({ url: 'https://krillion.io/' });
+    expect(game).toHaveAttribute('href', '/board?game=krillion&period=today');
+  });
+
+  test('sends a guest to log in for a like and keeps the comment list', async () => {
+    const user = userEvent.setup();
+    global.fetch.mockImplementation(async (url) => {
+      const path = String(url);
+      if (path === '/api/feed') return { ok: true, status: 200, json: async () => ({ posts: [post] }) };
+      if (path.endsWith('/comments')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ comments: [{ comment_id: 1, body: 'sharp', user: { user_id: 8, display_name: 'Bea' } }] }),
+        };
+      }
+      return { ok: false, status: 500, json: async () => ({ error: 'Request failed' }) };
+    });
+    renderFeed(null);
+    await user.click(await screen.findByRole('button', { name: 'Like 1' }));
+    expect(screen.getByTestId('where')).toHaveTextContent('/login?next=%2F');
+    expect(screen.getByRole('button', { name: 'Like 1' })).toBeInTheDocument();
+    expect(global.fetch.mock.calls.some((call) => String(call[0]).includes('/like'))).toBe(false);
+  });
+
+  test('shows comments to a guest and asks them to log in to write', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ comments: [{ comment_id: 1, body: 'sharp', user: { user_id: 8, display_name: 'Bea' } }] }),
+    });
+    const store = configureStore({
+      reducer: rootReducer,
+      preloadedState: { auth: { user: null, isAuthenticated: false, isLoading: false } },
+    });
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/post/3']}>
+          <ScoreCard post={post} detail onChange={() => {}} />
+        </MemoryRouter>
+      </Provider>
+    );
+    expect(await screen.findByText('sharp')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Log In' })).toHaveAttribute('href', '/login?next=%2Fpost%2F3');
+    expect(screen.queryByPlaceholderText('Comment')).not.toBeInTheDocument();
   });
 
   test('reports a failed load', async () => {

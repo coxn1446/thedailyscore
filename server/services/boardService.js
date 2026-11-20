@@ -2,6 +2,7 @@ const { isDbHealthy, query } = require('../db');
 const groupQueries = require('../queries/groupQueries');
 const scoreService = require('./scoreService');
 const friendService = require('./friendService');
+const { slugOrder, sortWith } = require('./gameOrder');
 
 const DB_REQUIRED = 'Database is unavailable. Start Postgres and apply server/db/schema.sql.';
 
@@ -29,9 +30,20 @@ const presentGame = (row) => ({
   sort_order: row.sort_order == null ? null : Number(row.sort_order),
 });
 
+const zoneName = (value) => {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone: value.trim() }).format(new Date());
+    return value.trim();
+  } catch {
+    return '';
+  }
+};
+
 const board = async (user, input = {}) => {
   requireDb();
   const scope = input.scope === 'friends' ? 'friends' : 'global';
+  if (scope === 'friends' && !user?.user_id) httpError(401, 'Not authenticated');
   const slug = typeof input.game === 'string' ? input.game.trim().toLowerCase() : '';
   const from = isoDate(input.from);
   const to = isoDate(input.to) || from;
@@ -42,19 +54,24 @@ const board = async (user, input = {}) => {
     userIds = [Number(user.user_id), ...ids];
   }
   const catalog = await query(groupQueries.listGames);
-  const prefs = await query(require('../queries/profileQueries').listUserGames, [user.user_id]);
-  const off = new Set(
-    prefs.rows
-      .filter((row) => row.enabled === false || row.enabled === 'f')
-      .map((row) => row.slug)
-  );
-  const games = catalog.rows.filter((row) => !off.has(row.slug));
-  const standings = await scoreService.globalBoard(user.user_id, user.timezone || 'UTC', userIds, range);
+  let off = new Set();
+  if (user?.user_id) {
+    const prefs = await query(require('../queries/profileQueries').listUserGames, [user.user_id]);
+    off = new Set(
+      prefs.rows
+        .filter((row) => row.enabled === false || row.enabled === 'f')
+        .map((row) => row.slug)
+    );
+  }
+  const order = await slugOrder(user?.user_id);
+  const games = sortWith(catalog.rows.filter((row) => !off.has(row.slug)), order, (row) => row.slug);
+  const timezone = zoneName(user?.timezone) || zoneName(input.tz) || 'UTC';
+  const standings = await scoreService.globalBoard(user?.user_id || null, timezone, userIds, range);
   const game = games.find((row) => row.slug === slug) || null;
   return {
     scope,
     games: games.map(presentGame),
-    standings: standings.standings(0).filter((row) => !off.has(row.slug)),
+    standings: sortWith(standings.standings(0).filter((row) => !off.has(row.slug)), order, (row) => row.slug),
     board: game
       ? standings.board(0, { ...presentGame(game), enabled: true })
       : null,

@@ -1,11 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { CalendarMark } from '../components/Brand/Marks';
 import GameLogo from '../components/Brand/GameLogo';
 import BoardRegister from '../components/Board/BoardRegister';
 import Loading from '../components/Loading/Loading';
+import { signedOutLoginTarget } from '../helpers/accountDeleted';
 import { fetchBoard } from '../helpers/boardHelpers';
+import { guestEnabledSlugs, guestGameOrder } from '../helpers/guestCache';
 import { SCORE_POSTED } from '../helpers/scoreHelpers';
+import { selectUser } from '../store/auth.reducer';
 
 const PERIODS = [
   { id: 'today', label: 'Today' },
@@ -25,6 +29,8 @@ const tabClass = (active) =>
   }`;
 
 const Board = () => {
+  const user = useSelector(selectUser);
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedGame = searchParams.get('game') || '';
   const period = PERIODS.some((item) => item.id === searchParams.get('period'))
@@ -41,6 +47,12 @@ const Board = () => {
   const gameRow = useRef(null);
 
   const choose = (key, value) => {
+    if (key === 'scope' && value === 'friends' && !user?.user_id) {
+      const next = new URLSearchParams(searchParams);
+      next.set('scope', 'friends');
+      navigate(signedOutLoginTarget('/board', `?${next.toString()}`).to);
+      return;
+    }
     const next = new URLSearchParams(searchParams);
     if (value) next.set(key, value);
     else next.delete(key);
@@ -52,6 +64,10 @@ const Board = () => {
   };
 
   useEffect(() => {
+    if (scope === 'friends' && !user?.user_id) {
+      navigate(signedOutLoginTarget('/board', `?${searchParams.toString()}`).to, { replace: true });
+      return undefined;
+    }
     let cancelled = false;
     const load = () => {
       setLoadError('');
@@ -62,7 +78,30 @@ const Board = () => {
         to: period === 'custom' ? (to || from) : '',
       })
         .then((data) => {
-          if (!cancelled) setPayload(data);
+          if (cancelled || !data) return;
+          if (user?.user_id) {
+            setPayload(data);
+            return;
+          }
+          const enabled = guestEnabledSlugs();
+          const rank = new Map(guestGameOrder().map((slug, index) => [slug, index]));
+          const byOrder = (list) => [...list].sort(
+            (a, b) => (rank.get(a.slug) ?? rank.size) - (rank.get(b.slug) ?? rank.size)
+          );
+          if (!enabled) {
+            setPayload({
+              ...data,
+              games: byOrder(data.games || []),
+              standings: byOrder(data.standings || []),
+            });
+            return;
+          }
+          setPayload({
+            ...data,
+            games: byOrder((data.games || []).filter((game) => enabled.has(game.slug))),
+            standings: byOrder((data.standings || []).filter((row) => enabled.has(row.slug))),
+            board: data.board && enabled.has(data.board.slug) ? data.board : null,
+          });
         })
         .catch((err) => {
           if (!cancelled) setLoadError(err.message || 'Could not load the board.');
@@ -74,7 +113,7 @@ const Board = () => {
       cancelled = true;
       window.removeEventListener(SCORE_POSTED, load);
     };
-  }, [selectedGame, scope, period, from, to]);
+  }, [selectedGame, scope, period, from, to, user?.user_id]);
 
   useEffect(() => {
     if (!payload || selectedGame) return undefined;

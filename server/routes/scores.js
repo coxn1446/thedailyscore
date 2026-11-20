@@ -2,6 +2,16 @@ const { Router } = require('express');
 const requireAuth = require('../middleware/requireAuth');
 const scoreService = require('../services/scoreService');
 
+const zoneOf = (value) => {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone: value.trim() }).format(new Date());
+    return value.trim();
+  } catch {
+    return '';
+  }
+};
+
 module.exports = () => {
   const router = Router();
 
@@ -51,13 +61,15 @@ module.exports = () => {
     }
   });
 
-  router.post('/preview', requireAuth, async (req, res, next) => {
+  router.post('/preview', async (req, res, next) => {
     try {
+      const viewer = req.isAuthenticated?.() && req.user ? req.user : null;
+      const zone = viewer?.timezone || zoneOf(req.body?.timezone) || 'UTC';
       const payload = await scoreService.preview(
-        req.user.user_id,
+        viewer?.user_id ?? null,
         req.body?.paste,
         new Date(),
-        req.user.timezone || 'UTC'
+        zone
       );
       return res.json(payload);
     } catch (err) {
@@ -99,6 +111,20 @@ module.exports = () => {
       }
       const groups = Array.isArray(req.body?.groups) ? req.body.groups : [];
       const payload = await scoreService.updateShares(req.user.user_id, scoreId, groups);
+      return res.json(payload);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  router.post('/import', requireAuth, async (req, res, next) => {
+    try {
+      const pastes = Array.isArray(req.body?.pastes) ? req.body.pastes : [];
+      const payload = await scoreService.importPastes(
+        req.user.user_id,
+        pastes,
+        req.user.timezone || 'UTC'
+      );
       return res.json(payload);
     } catch (err) {
       return next(err);

@@ -143,6 +143,12 @@ const enabledSlugSet = async (userId) => {
   );
 };
 
+const gameSort = (custom, catalogOrder, index) => {
+  if (custom == null || custom === '') return Number(catalogOrder);
+  const sort = Number(custom);
+  return Number.isNaN(sort) ? index : sort;
+};
+
 const readGames = async (userId) => {
   requireDb();
   const groupQueries = require('../queries/groupQueries');
@@ -150,37 +156,65 @@ const readGames = async (userId) => {
     query(groupQueries.listGames),
     query(profileQueries.listUserGames, [userId]),
   ]);
-  const off = new Set(
-    saved.rows
-      .filter((row) => row.enabled === false || row.enabled === 'f')
-      .map((row) => row.slug)
-  );
-  return {
-    games: catalog.rows.map((game) => ({
+  const pref = new Map(saved.rows.map((row) => [row.slug, row]));
+  const games = catalog.rows.map((game, index) => {
+    const row = pref.get(game.slug);
+    const off = row && (row.enabled === false || row.enabled === 'f');
+    return {
       slug: game.slug,
       name: game.name,
-      enabled: !off.has(game.slug),
-    })),
+      enabled: !off,
+      sort_order: gameSort(row ? row.sort_order : null, game.sort_order, index),
+    };
+  });
+  games.sort((a, b) => a.sort_order - b.sort_order || a.slug.localeCompare(b.slug));
+  return { games };
+};
+
+const parseGameSelection = (input, catalog) => {
+  const known = new Set(catalog.map((game) => game.slug));
+  const entries = Array.isArray(input) ? input : [];
+  const objects = entries.length > 0 && typeof entries[0] === 'object' && entries[0] !== null;
+  const ordered = [];
+  const seen = new Set();
+  const enabled = new Set();
+  const take = (slug, on) => {
+    if (!slug || seen.has(slug)) return;
+    if (!known.has(slug)) httpError(400, 'Unknown game');
+    seen.add(slug);
+    ordered.push(slug);
+    if (on) enabled.add(slug);
   };
+  for (const item of entries) {
+    if (objects) {
+      const slug = typeof item.slug === 'string' ? item.slug.trim().toLowerCase() : '';
+      take(slug, item.enabled !== false);
+    } else {
+      const slug = typeof item === 'string' ? item.trim().toLowerCase() : '';
+      take(slug, true);
+    }
+  }
+  for (const game of catalog) {
+    if (!seen.has(game.slug)) ordered.push(game.slug);
+  }
+  if (!enabled.size) httpError(400, 'Select a game');
+  return ordered.map((slug, index) => ({
+    slug,
+    enabled: enabled.has(slug),
+    sort_order: index,
+  }));
 };
 
 const saveGames = async (userId, slugs) => {
   requireDb();
   const groupQueries = require('../queries/groupQueries');
   const catalog = await query(groupQueries.listGames);
-  const wanted = new Set(
-    (Array.isArray(slugs) ? slugs : [])
-      .map((slug) => (typeof slug === 'string' ? slug.trim().toLowerCase() : ''))
-      .filter(Boolean)
-  );
-  const known = new Set(catalog.rows.map((game) => game.slug));
-  for (const slug of wanted) {
-    if (!known.has(slug)) httpError(400, 'Unknown game');
-  }
-  if (!wanted.size) httpError(400, 'Select a game');
+  const selection = parseGameSelection(slugs, catalog.rows);
+  const bySlug = new Map(catalog.rows.map((game) => [game.slug, game]));
   await withTransaction(async (client) => {
-    for (const game of catalog.rows) {
-      await run(client, profileQueries.upsertUserGame, [userId, game.game_id, wanted.has(game.slug)]);
+    for (const game of selection) {
+      const row = bySlug.get(game.slug);
+      await run(client, profileQueries.upsertUserGame, [userId, row.game_id, game.enabled, game.sort_order]);
     }
   });
   return readGames(userId);
@@ -207,7 +241,12 @@ const readPlayer = async (viewerId, handle) => {
   const row = found.rows[0];
   if (!row || row.suspended) httpError(404, 'Unknown handle');
   const { rows } = await query(profileQueries.listStats, [row.user_id, 'all']);
-  const relation = await relationTo(viewerId, row.user_id);
+  const relation = viewerId ? await relationTo(viewerId, row.user_id) : { status: 'none' };
+  let viewerStats = null;
+  if (viewerId && Number(viewerId) !== Number(row.user_id)) {
+    const mine = await query(profileQueries.listStats, [viewerId, 'all']);
+    viewerStats = mine.rows.map(presentStat);
+  }
   return {
     user: {
       user_id: Number(row.user_id),
@@ -216,6 +255,7 @@ const readPlayer = async (viewerId, handle) => {
       portrait_url: row.portrait_url || null,
     },
     stats: rows.map(presentStat),
+    viewer_stats: viewerStats,
     relation,
   };
 };
@@ -245,6 +285,17 @@ const updateNotifications = async (actorId, body = {}) => {
   assertSelf(actorId, body.user_id);
   const enabled = flag(body.notifications, 'Notifications');
   const { rows } = await query(profileQueries.updateNotifications, [actorId, enabled]);
+  const user = presentUser(rows[0] || null);
+  if (!user) httpError(404, 'Account not found');
+  return user;
+};
+
+const updateFeedScope = async (actorId, body = {}) => {
+  requireDb();
+  assertSelf(actorId, body.user_id);
+  const scope = body.feed_scope === 'friends' || body.feed_scope === 'everyone' ? body.feed_scope : '';
+  if (!scope) httpError(400, 'Choose a feed');
+  const { rows } = await query(profileQueries.updateFeedScope, [actorId, scope]);
   const user = presentUser(rows[0] || null);
   if (!user) httpError(404, 'Account not found');
   return user;
@@ -344,6 +395,7 @@ module.exports = {
   update,
   updateAlerts,
   updateNotifications,
+  updateFeedScope,
   updateNightMode,
   exportScores,
   removeAccount,

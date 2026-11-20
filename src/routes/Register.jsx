@@ -7,6 +7,8 @@ import LegalLinks from '../components/Legal/LegalLinks';
 import RegisterForm from '../components/Auth/RegisterForm';
 import HandleForm from '../components/Auth/HandleForm';
 import { claimHandle, registerWithPassword } from '../helpers/authHelpers';
+import { markGuestImport } from '../helpers/guestCache';
+import { importGuestIntoAccount } from '../helpers/guestImport';
 import { clientTimezone, needsHandle } from '../helpers/identity';
 import { selectIsAuthenticated, selectUser, setUser } from '../store/auth.reducer';
 
@@ -18,8 +20,14 @@ const Register = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const choosingHandle = isAuthenticated && needsHandle(user);
 
-  const finish = (nextUser) => {
+  const finish = async (nextUser) => {
     dispatch(setUser(nextUser));
+    markGuestImport(nextUser?.user_id);
+    try {
+      await importGuestIntoAccount();
+    } catch (err) {
+      toast.error(err.message || 'Scores stayed on this device');
+    }
     navigate('/', { replace: true });
   };
 

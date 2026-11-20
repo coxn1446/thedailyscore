@@ -5,6 +5,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { Browser } from '@capacitor/browser';
 import { Capacitor } from '@capacitor/core';
 import { clearUser, selectAuthLoading, selectIsAuthenticated, selectUser, setUser } from '../store/auth.reducer';
+import { guestNight } from '../helpers/guestCache';
 import { applyNightMode } from '../utils/nightMode';
 import { completeNativeOAuthSessionHandoff, fetchCurrentUser } from '../helpers/authHelpers';
 import { onSessionLost } from '../helpers/sessionClient';
@@ -23,6 +24,7 @@ const Post = lazy(() => import('../routes/Post'));
 const Board = lazy(() => import('../routes/Board'));
 const Admin = lazy(() => import('../routes/Admin'));
 const Profile = lazy(() => import('../routes/Profile'));
+const Notifications = lazy(() => import('../routes/Notifications'));
 const RequestGame = lazy(() => import('../routes/RequestGame'));
 const Login = lazy(() => import('../routes/Login'));
 const Register = lazy(() => import('../routes/Register'));
@@ -68,12 +70,18 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
-const IndexRoute = () => {
-  const isAuthenticated = useSelector(selectIsAuthenticated);
+const HandleGate = ({ children }) => {
   const isLoading = useSelector(selectAuthLoading);
   const user = useSelector(selectUser);
   if (isLoading) return <Loading />;
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (needsHandle(user)) return <Navigate to="/register" replace />;
+  return children;
+};
+
+const IndexRoute = () => {
+  const isLoading = useSelector(selectAuthLoading);
+  const user = useSelector(selectUser);
+  if (isLoading) return <Loading />;
   if (needsHandle(user)) return <Navigate to="/register" replace />;
   return <Home />;
 };
@@ -87,8 +95,8 @@ const App = () => {
 
   useEffect(() => {
     if (authLoading) return;
-    applyNightMode(user?.night_mode === true);
-  }, [authLoading, user?.night_mode]);
+    applyNightMode(user ? user.night_mode === true : guestNight());
+  }, [authLoading, user]);
 
   useEffect(() => onSessionLost(() => {
     dispatch(clearUser());
@@ -191,9 +199,9 @@ const App = () => {
             <Route
               path="/post/:scoreId"
               element={
-                <ProtectedRoute>
+                <HandleGate>
                   <Post />
-                </ProtectedRoute>
+                </HandleGate>
               }
             />
             <Route
@@ -216,9 +224,9 @@ const App = () => {
             <Route
               path="/board"
               element={
-                <ProtectedRoute>
+                <HandleGate>
                   <Board />
-                </ProtectedRoute>
+                </HandleGate>
               }
             />
             <Route path="/groups" element={<Navigate to="/board" replace />} />
@@ -236,17 +244,25 @@ const App = () => {
             <Route
               path="/profile/:handle"
               element={
-                <ProtectedRoute>
+                <HandleGate>
                   <Profile />
+                </HandleGate>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <ProtectedRoute>
+                  <Notifications />
                 </ProtectedRoute>
               }
             />
             <Route
               path="/profile"
               element={
-                <ProtectedRoute>
+                <HandleGate>
                   <Profile />
-                </ProtectedRoute>
+                </HandleGate>
               }
             />
             <Route
